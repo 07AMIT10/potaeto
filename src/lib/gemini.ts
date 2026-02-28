@@ -24,6 +24,11 @@ export function getGeminiTtsModel(): string {
   return process.env.GEMINI_TTS_MODEL?.trim() || 'gemini-2.5-flash-preview-tts';
 }
 
+/** Summarization/distillation: override with GEMINI_SUMMARY_MODEL (defaults to GEMINI_MODEL). */
+export function getGeminiSummaryModel(): string {
+  return process.env.GEMINI_SUMMARY_MODEL?.trim() || getGeminiModel();
+}
+
 export function createGeminiClient(apiKey: string) {
   return new GoogleGenAI({ apiKey });
 }
