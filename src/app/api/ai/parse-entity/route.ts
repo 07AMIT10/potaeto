@@ -1,17 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
-import { createGeminiClient, getGeminiApiKey, getGeminiModel } from '@/lib/gemini';
 import { NextResponse } from 'next/server';
 
-const ENTITY_JSON_SCHEMA = `
-Return a single JSON object (no markdown, no code fence) with exactly these keys:
-- name: string (short name for the character/persona)
-- slug: string (lowercase, hyphenated, e.g. "chef-mario")
-- characteristics: object with optional keys age, role, background (strings)
-- appearance: object with optional key description (string), reference_image_urls (array of strings if any)
-- persona: object with optional keys tone, style, catchphrases (array), dialogue_examples (array of strings)
-- skills: array of strings (e.g. ["cooking", "storytelling"])
-- attributes: object with optional key-value pairs (e.g. humor: 0.8, formal: 0.2)
-`;
+const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8000';
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -28,39 +18,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing or invalid text' }, { status: 400 });
   }
 
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    return NextResponse.json(
-      {
-        error:
-          'Gemini API key not configured. In .env.local (project root) set GOOGLE_GEMINI_API_KEY=your-key. Then restart the dev server: stop it (Ctrl+C) and run npm run dev again.',
-      },
-      { status: 503 }
-    );
-  }
-
-  const ai = createGeminiClient(apiKey);
-  const prompt = `The user is describing a character or persona they want to create ("WHO and WHAT"). Extract structured data from their description.
-
-User description:
-"""
-${text}
-"""
-
-${ENTITY_JSON_SCHEMA}`;
-
   try {
-    const res = await ai.models.generateContent({
-      model: getGeminiModel(),
-      contents: prompt,
+    const res = await fetch(`${ORCHESTRATOR_URL}/v1/parse-entity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
     });
 
-    const rawText =
-      (res as { text?: string }).text ??
-      (res as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }).candidates?.[0]?.content?.parts?.[0]?.text ??
-      '';
-    const cleaned = rawText.replace(/^```\w*\n?|\n?```$/g, '').trim();
-    const entity = JSON.parse(cleaned) as {
+    if (!res.ok) {
+      const msg = await res.text().catch(() => '');
+      console.error('orchestrator parse-entity error:', res.status, msg);
+      return NextResponse.json({ error: 'Failed to parse entity' }, { status: 502 });
+    }
+
+    const entity = (await res.json()) as {
       name: string;
       slug: string;
       characteristics?: Record<string, unknown>;
@@ -71,7 +42,7 @@ ${ENTITY_JSON_SCHEMA}`;
     };
 
     if (!entity.name || !entity.slug) {
-      return NextResponse.json({ error: 'Invalid entity structure from AI' }, { status: 500 });
+      return NextResponse.json({ error: 'Invalid entity structure from orchestrator' }, { status: 500 });
     }
 
     const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).single();

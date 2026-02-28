@@ -1,6 +1,6 @@
 # Potaeto – Project Context
 
-**Last updated:** After initial MVP implementation (first full implementation pass).
+**Last updated:** After wiring web → orchestrator for chat/summarization/parse-entity/skills, adding Groq/HF providers, routing logs, and admin dashboards.
 
 ## What is Potaeto
 
@@ -13,13 +13,27 @@ Potaeto is a user-friendly, multiplatform MVP app where users:
 
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router), React, Tailwind CSS, TypeScript.
-- **Backend / BaaS:** Supabase (Auth, Postgres, Storage). All Gemini calls go through Next.js API routes (server-side).
-- **AI:** Google Gemini API (text, image, TTS). Default text model: `gemini-2.5-flash`. Override with env: `GEMINI_MODEL`, `GEMINI_IMAGE_MODEL`, `GEMINI_TTS_MODEL`. Optional: user-provided Gemini API key in profile.
+- **Frontend:** Next.js 14 (App Router), React, Tailwind CSS, TypeScript. Runs as a PWA.
+- **Backend / BaaS:** Supabase (Auth, Postgres, Storage, RLS, pgvector).
+- **Orchestrator:** Python FastAPI service in `apps/orchestrator` that routes between models using `models_config` (providers: Gemini, Groq, Hugging Face via InferenceClient) and logs usage to `model_usage_logs`.
+- **AI:** Google Gemini API (text, image, TTS) + optional Groq + Hugging Face-backed models, all abstracted behind the orchestrator for most flows. Default text model for direct Gemini usage: `gemini-2.5-flash`. Override with env: `GEMINI_MODEL`, `GEMINI_SUMMARY_MODEL`, `GEMINI_IMAGE_MODEL`, `GEMINI_TTS_MODEL`. Optional: user-provided Gemini API key in profile.
 - **Voice input:** `react-speech-recognition` (Web Speech API) for “describe WHO/WHAT” by voice.
-- **PWA:** Next.js manifest; installable web app.
 
 ## Repo Structure
+
+High level:
+
+```
+apps/
+  web/                     # (planned) Next.js PWA (currently at repo root src/)
+  orchestrator/            # Python FastAPI model router & skills orchestrator
+
+supabase/
+  migrations/              # SQL migrations for all tables
+  config.toml
+```
+
+Frontend (current layout under `src/`):
 
 ```
 src/
@@ -28,36 +42,45 @@ src/
     (app)/                 # Authenticated app
       onboarding/          # First-time: describe WHO/WHAT
       create/              # Edit entity, add avatar
-      chat/[entityId]/     # Chat with entity
+      chat/[entityId]/     # Chat with entity (now backed by conversations/messages)
       avatar/[entityId]/   # Script-based avatar + TTS
-      library/             # Generated content
+      library/             # Generated content + image/text gen
       share/               # Share links
-    (public)/
-      u/[username]/        # Public user profile
-      e/[slug]/            # Public entity profile
-      c/[contentId]/       # Public content view
     api/
       auth/                # Supabase auth callback
       ai/
-        parse-entity/      # POST: text/voice → WHO/WHAT JSON
-        chat/              # POST: streaming chat
+        parse-entity/      # POST: text/voice → WHO/WHAT JSON (delegates to orchestrator /v1/parse-entity)
+        chat/              # POST: chat with memory + summary (delegates to orchestrator /v1/chat + /v1/summarize)
         script/            # POST: generate script
         tts/               # POST: text → speech
         generate/
           image/           # POST: image generation
           text/            # POST: text generation
-    admin/                 # Admin dashboard (metrics)
+      skills/
+        songwriter/invoke/ # POST: invoke songwriter skill (delegates to orchestrator /v1/skills/songwriter/invoke)
+      conversations/[entityId]/messages/  # GET: load persisted chat history
+    admin/                 # Admin dashboard (metrics, models, skills, memory/logs)
   components/
   lib/
     supabase/              # client, server, middleware
+    gemini.ts              # env-driven model config helpers
   types/
 ```
 
 ## Data Model
 
-- **profiles:** id (→ auth.users), username, avatar_url, gemini_api_key_encrypted, is_public.
-- **entities:** id, user_id, name, slug, characteristics (JSONB), appearance (JSONB), persona (JSONB), skills (JSONB), attributes (JSONB), avatar_asset_url, is_public.
-- **content:** id, user_id, entity_id, type (image|video|audio|text), storage_path, public_url, metadata (JSONB).
+- **profiles**: id (→ auth.users), username, avatar_url, gemini_api_key_encrypted, is_public.
+- **entities**: id, user_id, name, slug, characteristics (JSONB), appearance (JSONB), persona (JSONB), skills (JSONB), attributes (JSONB), avatar_asset_url, is_public.
+- **content**: id, user_id, entity_id, type (image|video|audio|text), storage_path, public_url, metadata (JSONB).
+- **conversations**: id, user_id, entity_id, title, created_at, updated_at (one per user×entity for now).
+- **messages**: id, conversation_id, user_id, role (`user`/`assistant`/`system`), content, meta, created_at.
+- **conversation_summaries**: conversation_id (PK), user_id, entity_id, summary, last_message_id, updated_at.
+- **memories**: id, user_id, entity_id, kind (`summary`/`fact`/`preference`/`event`), content, embedding (vector), weight, created_at.
+- **models_config**: id, provider, model_key, display_name, task_type, priority, enabled, temperature, top_p, max_output_tokens, cost fields, rate_limit_rpm, group, extra.
+- **model_usage_logs**: id, created_at, task_type, provider, model_key, success, latency_ms, error_message, metadata (JSONB).
+- **skills**: id (`songwriter`, `painter`, ...), name, description, icon, category, pipeline_config (JSONB).
+- **entity_skills**: (entity_id, skill_id) PK, config (JSONB), enabled.
+- **skill_outputs**: id, user_id, entity_id, skill_id, content_type, storage_path/public_url or text_content, metadata, created_at.
 
 Storage buckets: `avatars`, `content` (public URLs for shareable content).
 
@@ -75,9 +98,14 @@ Storage buckets: `avatars`, `content` (public URLs for shareable content).
 ## How to Run
 
 1. Copy `.env.example` to `.env.local` and set Supabase + Gemini keys.
-2. Run Supabase migrations: use **Supabase MCP** (if enabled), **Supabase CLI** (`supabase link` then `supabase db push`), or **Dashboard** SQL editor — run files in `supabase/migrations/` in order (01 → 05).
-3. `npm install` then `npm run dev`.
+2. Run Supabase migrations: use **Supabase MCP** (if enabled), **Supabase CLI** (`supabase link` then `supabase db push`), or **Dashboard** SQL editor — run files in `supabase/migrations/` in order.
+3. `npm install` then `npm run dev` (Next.js web).
+4. (When ready) In `apps/orchestrator`, install Python deps (`pip install -e .`) and run `uvicorn app.main:app --reload` to start the orchestrator API.
 
 ## Admin
 
-- Basic admin dashboard at `/admin` (protected by env or role): user count, entity count, content count, storage usage (or link to Supabase dashboard).
+- Admin overview at `/admin` (protected via `ADMIN_SECRET` header): users, entities, content, plus links.
+- `/admin/models`: read-only view of `models_config` and recent `model_usage_logs` stats (calls / errors / avg latency per model).
+- `/admin/skills`: read-only view of `skills` catalog + how many entities have each skill enabled via `entity_skills`.
+- `/admin/memory`: read-only view of recent `conversation_summaries`, `memories`, and raw `model_usage_logs`.
+- Editing (adding models/skills, toggles, quotas) is still done via SQL / Supabase dashboard for now.
