@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 
 interface Message {
   role: 'user' | 'model';
@@ -16,11 +16,35 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/conversations/${entityId}/messages`);
+        const data = await res.json();
+        if (!res.ok) return;
+        if (cancelled) return;
+        const loaded: Message[] = (data.messages ?? []).map((m: { role: string; content: string }) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: m.content,
+        }));
+        setMessages(loaded);
+      } finally {
+        if (!cancelled) setInitialLoading(false);
+        setTimeout(scrollToBottom, 50);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [entityId, scrollToBottom]);
 
   const send = async () => {
     const text = input.trim();
@@ -38,7 +62,6 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
         body: JSON.stringify({
           entityId,
           message: text,
-          history: messages.map((msg) => ({ role: msg.role, parts: msg.parts })),
         }),
       });
       if (!res.ok) {
@@ -76,7 +99,10 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
   return (
     <div className="flex-1 flex flex-col rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
+        {initialLoading && (
+          <p className="text-gray-500 text-sm">Loading conversation…</p>
+        )}
+        {!initialLoading && messages.length === 0 && (
           <p className="text-gray-500 text-sm">Chat with {entityName}. Send a message below.</p>
         )}
         {messages.map((msg, i) => (

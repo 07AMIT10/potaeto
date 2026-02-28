@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ChatUI } from './ChatUI';
+import { SongwriterSkillCard } from '@/components/SongwriterSkillCard';
 
 export default async function ChatPage({
   params,
@@ -38,6 +39,7 @@ export default async function ChatPage({
           Avatar / Script
         </Link>
       </div>
+      <SongwriterSkillCard entityId={entityId} />
       <ChatUI entityId={entityId} entityName={entity.name} />
     </div>
   );
