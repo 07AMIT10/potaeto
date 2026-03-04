@@ -15,27 +15,27 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur">
-        <nav className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-          <Link href="/onboarding" className="font-semibold text-potato-700">
+      <header className="sticky top-0 z-30 border-b border-[var(--card-border)] bg-[var(--background)]/80 backdrop-blur-xl">
+        <nav className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
+          <Link href="/onboarding" className="text-lg font-bold text-potato-600">
             Potaeto
           </Link>
-          <div className="flex gap-4 text-sm">
-            <Link href="/library" className="text-gray-600 dark:text-gray-400 hover:text-potato-600">
+          <div className="flex items-center gap-1">
+            <Link href="/library" className="btn-ghost text-xs sm:text-sm text-[var(--muted)]">
               Library
             </Link>
-            <Link href="/share" className="text-gray-600 dark:text-gray-400 hover:text-potato-600">
+            <Link href="/share" className="btn-ghost text-xs sm:text-sm text-[var(--muted)]">
               Share
             </Link>
             <form action="/api/auth/signout" method="post">
-              <button type="submit" className="text-gray-600 dark:text-gray-400 hover:text-potato-600">
+              <button type="submit" className="btn-ghost text-xs sm:text-sm text-[var(--muted)]">
                 Sign out
               </button>
             </form>
           </div>
         </nav>
       </header>
-      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-6">{children}</main>
+      <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6">{children}</main>
     </div>
   );
 }

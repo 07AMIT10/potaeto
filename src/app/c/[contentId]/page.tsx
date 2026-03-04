@@ -20,16 +20,22 @@ export default async function ContentSharePage({
 
   return (
     <main className="min-h-screen max-w-2xl mx-auto px-4 py-8">
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 p-6">
-        <p className="text-sm text-gray-500 mb-4">Shared from Potaeto</p>
+      <div className="card p-6 sm:p-8 space-y-4 animate-fade-in">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">Shared from Potaeto</span>
+          <span className="inline-flex rounded-full bg-potato-100 dark:bg-potato-900/30 px-2.5 py-0.5 text-xs font-medium text-potato-700 dark:text-potato-300">
+            {content.type}
+          </span>
+        </div>
+
         {content.type === 'image' && content.public_url && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Image
               src={content.public_url}
               alt="Shared content"
               width={600}
               height={600}
-              className="rounded-lg w-full h-auto"
+              className="rounded-xl w-full h-auto"
             />
             <a
               href={content.public_url}
@@ -42,19 +48,20 @@ export default async function ContentSharePage({
           </div>
         )}
         {content.type === 'text' && (
-          <div className="prose dark:prose-invert max-w-none">
-            <pre className="whitespace-pre-wrap text-sm">
+          <div className="rounded-xl bg-black/5 dark:bg-white/5 p-4">
+            <pre className="whitespace-pre-wrap text-sm leading-relaxed">
               {(content.metadata as { text?: string })?.text ?? 'No text'}
             </pre>
           </div>
         )}
         {(content.type === 'video' || content.type === 'audio') && content.public_url && (
-          <a href={content.public_url} target="_blank" rel="noopener noreferrer" className="text-potato-600 hover:underline">
+          <a href={content.public_url} target="_blank" rel="noopener noreferrer" className="btn-primary inline-flex">
             Play / download
           </a>
         )}
-        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <Link href="/" className="text-potato-600 hover:underline">
+
+        <div className="pt-4 border-t border-[var(--card-border)]">
+          <Link href="/" className="text-potato-600 hover:underline font-medium text-sm">
             Create your own on Potaeto
           </Link>
         </div>

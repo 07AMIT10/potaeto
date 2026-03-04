@@ -1,5 +1,9 @@
 import { createServiceClient } from '@/lib/supabase/server';
 
+function truncateId(id: string) {
+  return id.length > 12 ? id.slice(0, 8) + '\u2026' : id;
+}
+
 export default async function AdminMemoryPage() {
   const supabase = createServiceClient();
 
@@ -8,182 +12,145 @@ export default async function AdminMemoryPage() {
       .from('conversation_summaries')
       .select('conversation_id, user_id, entity_id, summary, updated_at')
       .order('updated_at', { ascending: false })
-      .limit(50),
+      .limit(30),
     supabase
       .from('memories')
       .select('id, user_id, entity_id, kind, content, weight, created_at')
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(30),
     supabase
       .from('model_usage_logs')
       .select('created_at, task_type, provider, model_key, success, latency_ms, error_message')
       .order('created_at', { ascending: false })
-      .limit(100),
+      .limit(50),
   ]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       <div>
-        <h2 className="text-xl font-bold text-potato-800 dark:text-potato-200 mb-1">
-          Memory & routing logs
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Conversation summaries, long-term memories, and recent model routing events.
-        </p>
+        <h2 className="page-title">Memory & Logs</h2>
+        <p className="text-sm text-[var(--muted)] mt-1">Conversation summaries, long-term memories, and routing logs.</p>
       </div>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">Conversation summaries (latest 50)</h2>
-        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60">
-          <table className="min-w-full text-xs">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Conversation</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">User</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Entity</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Updated</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Summary</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(summaries ?? []).map((s) => (
-                <tr key={s.conversation_id} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
-                    {s.conversation_id}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
-                    {s.user_id}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
-                    {s.entity_id}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                    {s.updated_at ? new Date(s.updated_at).toLocaleString() : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 max-w-xl">
-                    {s.summary}
-                  </td>
+        <h3 className="section-title text-base">Conversation Summaries</h3>
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--card-border)] bg-black/[0.02] dark:bg-white/[0.02]">
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Conversation</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Updated</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Summary</th>
                 </tr>
-              ))}
-              {(!summaries || summaries.length === 0) && (
-                <tr>
-                  <td
-                    className="px-3 py-4 text-center text-xs text-gray-500"
-                    colSpan={5}
-                  >
-                    No summaries yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(summaries ?? []).map((s) => (
+                  <tr key={s.conversation_id} className="border-b border-[var(--card-border)] last:border-0">
+                    <td className="px-4 py-3 font-mono text-[11px]" title={s.conversation_id}>{truncateId(s.conversation_id)}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-[var(--muted)]">
+                      {s.updated_at ? new Date(s.updated_at).toLocaleString() : '\u2014'}
+                    </td>
+                    <td className="px-4 py-3 max-w-md">{s.summary}</td>
+                  </tr>
+                ))}
+                {(!summaries || summaries.length === 0) && (
+                  <tr><td className="px-4 py-8 text-center text-[var(--muted)]" colSpan={3}>No summaries yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">Memories (latest 50)</h2>
-        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60">
-          <table className="min-w-full text-xs">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Kind</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">User</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Entity</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Weight</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Created</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Content</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(memories ?? []).map((m) => (
-                <tr key={m.id} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-2 whitespace-nowrap">{m.kind}</td>
-                  <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
-                    {m.user_id}
-                  </td>
-                  <td className="px-3 py-2 font-mono text-[11px] whitespace-nowrap">
-                    {m.entity_id}
-                  </td>
-                  <td className="px-3 py-2 text-center">{m.weight ?? '—'}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                    {m.created_at ? new Date(m.created_at).toLocaleString() : '—'}
-                  </td>
-                  <td className="px-3 py-2 text-xs text-gray-700 max-w-xl">
-                    {m.content}
-                  </td>
+        <h3 className="section-title text-base">Memories</h3>
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--card-border)] bg-black/[0.02] dark:bg-white/[0.02]">
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Kind</th>
+                  <th className="px-4 py-3 text-center font-medium text-[var(--muted)]">Weight</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Created</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Content</th>
                 </tr>
-              ))}
-              {(!memories || memories.length === 0) && (
-                <tr>
-                  <td
-                    className="px-3 py-4 text-center text-xs text-gray-500"
-                    colSpan={6}
-                  >
-                    No memories yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {(memories ?? []).map((m) => (
+                  <tr key={m.id} className="border-b border-[var(--card-border)] last:border-0">
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
+                        m.kind === 'fact' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' :
+                        m.kind === 'preference' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' :
+                        m.kind === 'event' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                        'bg-gray-100 dark:bg-gray-800 text-gray-600'
+                      }`}>
+                        {m.kind}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">{m.weight ?? '\u2014'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-[var(--muted)]">
+                      {m.created_at ? new Date(m.created_at).toLocaleString() : '\u2014'}
+                    </td>
+                    <td className="px-4 py-3 max-w-md">{m.content}</td>
+                  </tr>
+                ))}
+                {(!memories || memories.length === 0) && (
+                  <tr><td className="px-4 py-8 text-center text-[var(--muted)]" colSpan={4}>No memories yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">Model routing logs (latest 100)</h2>
-        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60">
-          <table className="min-w-full text-xs">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Time</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Task</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Provider</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Model</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Latency (ms)</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Success</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Error</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(usage ?? []).map((u, idx) => (
-                <tr key={idx} className="border-t border-gray-100 dark:border-gray-800">
-                  <td className="px-3 py-2 whitespace-nowrap text-xs text-gray-500">
-                    {u.created_at ? new Date(u.created_at).toLocaleTimeString() : '—'}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap">{u.task_type}</td>
-                  <td className="px-3 py-2 whitespace-nowrap">{u.provider}</td>
-                  <td className="px-3 py-2 font-mono text-[11px] break-all">{u.model_key}</td>
-                  <td className="px-3 py-2 text-center">{u.latency_ms ?? '—'}</td>
-                  <td className="px-3 py-2">
-                    <span
-                      className={
+        <h3 className="section-title text-base">Model Routing Logs</h3>
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-xs">
+              <thead>
+                <tr className="border-b border-[var(--card-border)] bg-black/[0.02] dark:bg-white/[0.02]">
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Time</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Task</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Provider</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Model</th>
+                  <th className="px-4 py-3 text-center font-medium text-[var(--muted)]">ms</th>
+                  <th className="px-4 py-3 text-center font-medium text-[var(--muted)]">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-[var(--muted)]">Error</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(usage ?? []).map((u, idx) => (
+                  <tr key={idx} className="border-b border-[var(--card-border)] last:border-0">
+                    <td className="px-4 py-3 whitespace-nowrap text-[var(--muted)]">
+                      {u.created_at ? new Date(u.created_at).toLocaleTimeString() : '\u2014'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{u.task_type}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">{u.provider}</td>
+                    <td className="px-4 py-3 font-mono text-[11px]">{u.model_key}</td>
+                    <td className="px-4 py-3 text-center">{u.latency_ms ?? '\u2014'}</td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
                         u.success
-                          ? 'inline-flex items-center rounded-full bg-green-50 text-green-700 px-2 py-0.5 text-[10px]'
-                          : 'inline-flex items-center rounded-full bg-red-50 text-red-700 px-2 py-0.5 text-[10px]'
-                      }
-                    >
-                      {u.success ? 'ok' : 'error'}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 text-[10px] text-red-500 max-w-xs">
-                    {u.error_message}
-                  </td>
-                </tr>
-              ))}
-              {(!usage || usage.length === 0) && (
-                <tr>
-                  <td
-                    className="px-3 py-4 text-center text-xs text-gray-500"
-                    colSpan={7}
-                  >
-                    No routing logs yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                      }`}>
+                        {u.success ? 'ok' : 'error'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[10px] text-red-500 max-w-xs">{u.error_message}</td>
+                  </tr>
+                ))}
+                {(!usage || usage.length === 0) && (
+                  <tr><td className="px-4 py-8 text-center text-[var(--muted)]" colSpan={7}>No routing logs yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </div>
   );
 }
-

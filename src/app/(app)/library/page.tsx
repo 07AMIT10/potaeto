@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
 import { LibraryContent } from './LibraryContent';
 
 export default async function LibraryPage() {
@@ -24,12 +23,12 @@ export default async function LibraryPage() {
     .limit(50);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-potato-800">Library</h1>
-      <LibraryContent
-        entities={entities ?? []}
-        content={content ?? []}
-      />
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="page-title">Library</h1>
+        <p className="text-[var(--muted)] text-sm mt-1">Generate and browse your content.</p>
+      </div>
+      <LibraryContent entities={entities ?? []} content={content ?? []} />
     </div>
   );
 }

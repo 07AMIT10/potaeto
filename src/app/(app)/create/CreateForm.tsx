@@ -81,93 +81,112 @@ export function CreateForm({ entity, entitiesList }: CreateFormProps) {
   };
 
   return (
-    <form onSubmit={handleSave} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
-        />
+    <form onSubmit={handleSave} className="space-y-5">
+      <div className="card p-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="input-field"
+              placeholder="Chef Mario"
+            />
+          </div>
+          <div>
+            <label className="label">Slug (for share URL)</label>
+            <input
+              type="text"
+              value={slug}
+              onChange={(e) => setSlug(e.target.value)}
+              placeholder="chef-mario"
+              className="input-field"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="label">Characteristics (JSON)</label>
+          <textarea
+            value={characteristics}
+            onChange={(e) => setCharacteristics(e.target.value)}
+            rows={3}
+            className="input-field font-mono text-xs"
+          />
+        </div>
+        <div>
+          <label className="label">Appearance (JSON)</label>
+          <textarea
+            value={appearance}
+            onChange={(e) => setAppearance(e.target.value)}
+            rows={3}
+            className="input-field font-mono text-xs"
+          />
+        </div>
+        <div>
+          <label className="label">Persona (JSON)</label>
+          <textarea
+            value={persona}
+            onChange={(e) => setPersona(e.target.value)}
+            rows={3}
+            className="input-field font-mono text-xs"
+          />
+        </div>
+        <div>
+          <label className="label">Skills (comma-separated)</label>
+          <input
+            type="text"
+            value={skills}
+            onChange={(e) => setSkills(e.target.value)}
+            placeholder="cooking, storytelling"
+            className="input-field"
+          />
+        </div>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Slug (for share URL)</label>
-        <input
-          type="text"
-          value={slug}
-          onChange={(e) => setSlug(e.target.value)}
-          placeholder="my-character"
-          className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Characteristics (JSON)</label>
-        <textarea
-          value={characteristics}
-          onChange={(e) => setCharacteristics(e.target.value)}
-          rows={3}
-          className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 font-mono text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Appearance (JSON)</label>
-        <textarea
-          value={appearance}
-          onChange={(e) => setAppearance(e.target.value)}
-          rows={3}
-          className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 font-mono text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Persona (JSON)</label>
-        <textarea
-          value={persona}
-          onChange={(e) => setPersona(e.target.value)}
-          rows={3}
-          className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 font-mono text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Skills (comma-separated)</label>
-        <input
-          type="text"
-          value={skills}
-          onChange={(e) => setSkills(e.target.value)}
-          placeholder="cooking, storytelling"
-          className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2"
-        />
-      </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex gap-3">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-lg bg-potato-500 px-6 py-2.5 font-medium text-white hover:bg-potato-600 disabled:opacity-50"
-        >
-          {saving ? 'Saving…' : 'Save'}
+
+      {error && (
+        <div className="card border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 p-3 text-sm text-red-700 dark:text-red-300 animate-fade-in">
+          {error}
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <button type="submit" disabled={saving} className="btn-primary">
+          {saving ? 'Saving...' : 'Save'}
         </button>
         {entity && (
-          <Link
-            href={`/chat/${entity.id}`}
-            className="rounded-lg border border-gray-300 dark:border-gray-600 px-6 py-2.5 font-medium hover:bg-gray-50 dark:hover:bg-gray-800"
-          >
+          <Link href={`/chat/${entity.id}`} className="btn-secondary text-center">
             Chat with {entity.name}
           </Link>
         )}
       </div>
+
       {entitiesList.length > 0 && (
-        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Your entities</p>
-          <ul className="mt-2 space-y-1">
+        <div className="card p-5 mt-6">
+          <h3 className="text-sm font-semibold mb-3">Your characters</h3>
+          <div className="space-y-2">
             {entitiesList.map((e) => (
-              <li key={e.id}>
-                <Link href={`/chat/${e.id}`} className="text-potato-600 hover:underline">
-                  {e.name} ({e.slug})
-                </Link>
-              </li>
+              <Link
+                key={e.id}
+                href={`/chat/${e.id}`}
+                className="flex items-center justify-between rounded-xl p-3 hover:bg-potato-50 dark:hover:bg-potato-900/20 transition-colors group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-potato-100 dark:bg-potato-900/30 flex items-center justify-center text-sm">
+                    {e.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">{e.name}</span>
+                    <span className="text-xs text-[var(--muted)] ml-2">{e.slug}</span>
+                  </div>
+                </div>
+                <svg className="w-4 h-4 text-[var(--muted)] group-hover:text-potato-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
             ))}
-          </ul>
+          </div>
         </div>
       )}
     </form>

@@ -23,8 +23,11 @@ export default async function SharePage() {
     .limit(30);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-potato-800">Share</h1>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="page-title">Share</h1>
+        <p className="text-[var(--muted)] text-sm mt-1">Manage your public profiles and content links.</p>
+      </div>
       <ShareUI entities={entities ?? []} content={content ?? []} />
     </div>
   );
