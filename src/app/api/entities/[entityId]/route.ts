@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 
 export async function PATCH(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ entityId: string }> }
 ) {
-  const { id } = await params;
+  const { entityId: id } = await params;
   const supabase = await createClient();
   const {
     data: { user },
@@ -37,9 +37,9 @@ export async function PATCH(
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ entityId: string }> }
 ) {
-  const { id } = await params;
+  const { entityId: id } = await params;
   const supabase = await createClient();
   const {
     data: { user },

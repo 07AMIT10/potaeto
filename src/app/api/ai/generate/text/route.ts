@@ -35,13 +35,11 @@ export async function POST(request: Request) {
     const ai = createGeminiClient(apiKey);
     const res = await ai.models.generateContent({
       model: getGeminiModel(),
-      systemInstruction: systemInstruction || undefined,
+      config: systemInstruction ? { systemInstruction } : undefined,
       contents: prompt,
     });
-    const text =
-      (res as { text?: string }).text ??
-      (res as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>).candidates?.[0]?.content?.parts?.[0]?.text ??
-      '';
+    type GenResult = { text?: string };
+    const text = (res as GenResult).text ?? '';
 
     if (save && entityId) {
       await supabase.from('content').insert({

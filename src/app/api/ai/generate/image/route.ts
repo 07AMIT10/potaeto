@@ -40,10 +40,17 @@ export async function POST(request: Request) {
       config: { numberOfImages: 1 },
     });
 
-    const imagePart = (res as { candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data: string; mimeType?: string } }> } }>)
-      .candidates?.[0]?.content?.parts?.[0];
-    const base64 = imagePart?.inlineData?.data;
-    const mimeType = imagePart?.inlineData?.mimeType ?? 'image/png';
+    type GenImageResult = {
+      generatedImages?: { image?: { imageBytes?: string; encoding?: string } }[];
+      candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string } }[] } }[];
+    };
+    const typed = res as GenImageResult;
+    const generatedImage = typed?.generatedImages?.[0];
+    const base64 = generatedImage?.image?.imageBytes
+      ?? typed?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    const mimeType = generatedImage?.image?.encoding
+      ?? typed?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.mimeType
+      ?? 'image/png';
     if (!base64) {
       return NextResponse.json({ error: 'No image in response' }, { status: 502 });
     }
