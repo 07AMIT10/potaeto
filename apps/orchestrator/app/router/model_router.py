@@ -14,7 +14,7 @@ from app.providers.groq import GroqProvider
 from app.providers.huggingface import HuggingFaceProvider
 
 
-TaskType = Literal["chat_primary", "summarize", "image_gen", "tts", "skill_text", "embedding"]
+TaskType = Literal["chat_primary", "summarize", "image_gen", "tts", "skill_text", "embedding", "proactive_message"]
 
 
 @dataclass

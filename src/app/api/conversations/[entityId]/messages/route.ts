@@ -27,7 +27,7 @@ export async function GET(
 
   const { data: messages, error: messagesError } = await supabase
     .from('messages')
-    .select('id, role, content, created_at')
+    .select('id, role, content, meta, created_at')
     .eq('conversation_id', conversation.id)
     .eq('user_id', user.id)
     .in('role', ['user', 'assistant'])
