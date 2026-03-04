@@ -74,54 +74,67 @@ export function LibraryContent({ entities, content }: LibraryContentProps) {
     }
   };
 
+  const entitySelect = (
+    <select
+      value={selectedEntity}
+      onChange={(e) => setSelectedEntity(e.target.value)}
+      className="input-field w-auto min-w-[140px]"
+    >
+      <option value="">No character</option>
+      {entities.map((e) => (
+        <option key={e.id} value={e.id}>{e.name}</option>
+      ))}
+    </select>
+  );
+
   return (
     <div className="space-y-8">
-      <section>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Generate image</h2>
-        <div className="flex flex-col sm:flex-row gap-2 mb-2">
-          <select
-            value={selectedEntity}
-            onChange={(e) => setSelectedEntity(e.target.value)}
-            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
-          >
-            <option value="">No character</option>
-            {entities.map((e) => (
-              <option key={e.id} value={e.id}>{e.name}</option>
-            ))}
-          </select>
+      <section className="card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 className="text-sm font-semibold">Generate image</h2>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
+          {entitySelect}
           <input
             type="text"
             value={imagePrompt}
             onChange={(e) => setImagePrompt(e.target.value)}
             placeholder="Describe the image..."
-            className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+            className="input-field flex-1"
           />
-          <button
-            type="button"
-            onClick={generateImage}
-            disabled={imageLoading}
-            className="rounded-lg bg-potato-500 px-4 py-2 text-sm font-medium text-white hover:bg-potato-600 disabled:opacity-50"
-          >
-            {imageLoading ? 'Generating…' : 'Generate'}
+          <button type="button" onClick={generateImage} disabled={imageLoading} className="btn-primary shrink-0">
+            {imageLoading ? 'Generating...' : 'Generate'}
           </button>
         </div>
         {generatedImageUrl && (
-          <div className="mt-2">
-            <Image src={generatedImageUrl} alt="Generated" width={320} height={320} className="rounded-lg" />
-            <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-potato-600 hover:underline mt-1 inline-block">
-              Open / share link
+          <div className="animate-fade-in">
+            <Image src={generatedImageUrl} alt="Generated" width={320} height={320} className="rounded-xl" />
+            <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-potato-600 hover:underline mt-2 inline-block">
+              Open full size
             </a>
           </div>
         )}
       </section>
 
-      <section>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Generate text</h2>
-        <div className="flex flex-col sm:flex-row gap-2 mb-2">
+      <section className="card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            <svg className="w-4 h-4 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <h2 className="text-sm font-semibold">Generate text</h2>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2">
           <select
             value={selectedEntity}
             onChange={(e) => setSelectedEntity(e.target.value)}
-            className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+            className="input-field w-auto min-w-[140px]"
           >
             <option value="">No character</option>
             {entities.map((e) => (
@@ -133,46 +146,52 @@ export function LibraryContent({ entities, content }: LibraryContentProps) {
             value={textPrompt}
             onChange={(e) => setTextPrompt(e.target.value)}
             placeholder="What should they write about?"
-            className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+            className="input-field flex-1"
           />
-          <button
-            type="button"
-            onClick={generateText}
-            disabled={textLoading}
-            className="rounded-lg bg-potato-500 px-4 py-2 text-sm font-medium text-white hover:bg-potato-600 disabled:opacity-50"
-          >
-            {textLoading ? 'Generating…' : 'Generate'}
+          <button type="button" onClick={generateText} disabled={textLoading} className="btn-primary shrink-0">
+            {textLoading ? 'Generating...' : 'Generate'}
           </button>
         </div>
         {generatedText && (
-          <div className="mt-2 p-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm whitespace-pre-wrap">
+          <div className="rounded-xl bg-black/5 dark:bg-white/5 p-4 text-sm whitespace-pre-wrap leading-relaxed animate-fade-in">
             {generatedText}
           </div>
         )}
       </section>
 
-      <section>
-        <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">Recent content</h2>
-        <ul className="space-y-2">
-          {content.length === 0 && (
-            <li className="text-gray-500 text-sm">No content yet. Generate an image or text above.</li>
-          )}
-          {content.map((c) => (
-            <li key={c.id} className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">{c.type}</span>
-              {c.public_url ? (
-                <a href={c.public_url} target="_blank" rel="noopener noreferrer" className="text-potato-600 hover:underline truncate max-w-xs">
-                  {c.public_url}
-                </a>
-              ) : (
-                <span className="text-gray-400">(no link)</span>
-              )}
-              <Link href={`/c/${c.id}`} className="text-gray-500 hover:underline">
-                Share page
-              </Link>
-            </li>
-          ))}
-        </ul>
+      <section className="space-y-3">
+        <h2 className="section-title text-base">Recent content</h2>
+        {content.length === 0 ? (
+          <div className="card p-8 text-center">
+            <p className="text-[var(--muted)] text-sm">No content yet. Generate an image or text above.</p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {content.map((c) => (
+              <div key={c.id} className="card p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">{c.type}</span>
+                  <Link href={`/c/${c.id}`} className="text-xs text-potato-600 hover:underline">
+                    Share
+                  </Link>
+                </div>
+                {c.type === 'image' && c.public_url && (
+                  <Image src={c.public_url} alt="Content" width={200} height={200} className="rounded-xl w-full h-auto" />
+                )}
+                {c.type === 'text' && (
+                  <p className="text-xs text-[var(--muted)] line-clamp-3">
+                    {(c.metadata as { text?: string })?.text ?? 'Text content'}
+                  </p>
+                )}
+                {c.public_url && (
+                  <a href={c.public_url} target="_blank" rel="noopener noreferrer" className="text-xs text-potato-600 hover:underline truncate block">
+                    {c.public_url}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

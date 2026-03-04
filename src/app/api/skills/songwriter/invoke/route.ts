@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { createClient } from '@/lib/supabase/server';
-
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8000';
+import { ORCHESTRATOR_URL } from '@/lib/config';
 
 type SongwriterInvokeBody = {
   entityId: string;

@@ -1,0 +1,39 @@
+# Render Blueprint — deploy orchestrator as a web service.
+# The Next.js frontend is deployed separately (e.g. Vercel or Render static site).
+#
+# Usage: connect this repo in Render Dashboard and it auto-detects render.yaml.
+# Set env vars in Render Dashboard or Render Environment Groups.
+
+services:
+  - type: web
+    name: potaeto-orchestrator
+    runtime: docker
+    dockerfilePath: apps/orchestrator/Dockerfile
+    dockerContext: apps/orchestrator
+    plan: free
+    region: oregon
+    healthCheckPath: /v1/health
+    envVars:
+      # Required
+      - key: GOOGLE_GEMINI_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      # Optional providers
+      - key: GROQ_API_KEY
+        sync: false
+      - key: HF_INFERENCE_BASE_URL
+        sync: false
+      - key: HF_API_KEY
+        sync: false
+      # Optional tuning
+      - key: ENABLED_PROVIDERS
+        value: gemini
+      - key: MODELS_CONFIG_CACHE_TTL_SEC
+        value: "120"
+      - key: HEALTH_RATE_LIMIT_BASE_BACKOFF
+        value: "15"
+      - key: HEALTH_RATE_LIMIT_MAX_BACKOFF
+        value: "300"

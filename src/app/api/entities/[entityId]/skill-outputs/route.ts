@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
-const DEFAULT_LIMIT = 15;
+import { SKILL_OUTPUTS_DEFAULT_LIMIT, SKILL_OUTPUTS_MAX_LIMIT } from '@/lib/config';
 
 /**
  * GET /api/entities/[entityId]/skill-outputs
@@ -22,7 +21,7 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url);
-  const limit = Math.min(Number(searchParams.get('limit')) || DEFAULT_LIMIT, 50);
+  const limit = Math.min(Number(searchParams.get('limit')) || SKILL_OUTPUTS_DEFAULT_LIMIT, SKILL_OUTPUTS_MAX_LIMIT);
 
   const { data: entity } = await supabase
     .from('entities')

@@ -5,22 +5,105 @@
 :root {
   --foreground: #1a1a1a;
   --background: #fef7ee;
+  --card: #ffffff;
+  --card-border: #f0e6d6;
+  --muted: #8c7a68;
+  --accent: #ed751a;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --foreground: #f5f5f5;
-    --background: #1a1510;
+    --background: #141210;
+    --card: #1e1b18;
+    --card-border: #2e2924;
+    --muted: #a09080;
+    --accent: #f19340;
   }
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border bg-[var(--card)] border-[var(--card-border)] shadow-sm;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-potato-500 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-potato-600 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-5 py-2.5 text-sm font-semibold transition-all hover:bg-potato-50 dark:hover:bg-potato-900/20 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all hover:bg-black/5 dark:hover:bg-white/5 active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-[var(--card-border)] bg-[var(--card)] px-4 py-2.5 text-sm transition-colors placeholder:text-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-potato-400/40 focus:border-potato-400;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-[var(--foreground)] mb-1.5;
+  }
+
+  .section-title {
+    @apply text-xl font-bold tracking-tight;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold tracking-tight;
+  }
+
+  .typing-dot {
+    @apply inline-block w-1.5 h-1.5 rounded-full bg-potato-400 animate-bounce;
+  }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 3px;
 }

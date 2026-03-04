@@ -53,10 +53,8 @@ export async function POST(request: Request) {
       model: getGeminiModel(),
       contents: `${context}\n\n${prompt}`,
     });
-    const rawText =
-      (res as { text?: string }).text ??
-      (res as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>).candidates?.[0]?.content?.parts?.[0]?.text ??
-      '';
+    type GenResult = { text?: string };
+    const rawText = (res as GenResult).text ?? '';
     return NextResponse.json({ script: rawText.trim() });
   } catch (err) {
     console.error('script error:', err);

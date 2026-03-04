@@ -3,9 +3,7 @@
  * Used by api/ai/chat and api/ai/chat/finalize.
  */
 
-const SUMMARY_TRIGGER_EVERY = 10;
-const SUMMARY_MAX_CHARS = 1200;
-const SUMMARY_SOURCE_MESSAGES = 20;
+import { SUMMARY_TRIGGER_EVERY, SUMMARY_MAX_CHARS, SUMMARY_SOURCE_MESSAGES } from '@/lib/config';
 
 type SupabaseClient = Awaited<ReturnType<typeof import('@/lib/supabase/server').createClient>>;
 

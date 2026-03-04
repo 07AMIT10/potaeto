@@ -5,6 +5,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 interface Message {
   role: 'user' | 'model';
   parts: string;
+  proactive?: boolean;
 }
 
 interface ChatUIProps {
@@ -16,8 +17,10 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -29,11 +32,11 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
       try {
         const res = await fetch(`/api/conversations/${entityId}/messages`);
         const data = await res.json();
-        if (!res.ok) return;
-        if (cancelled) return;
-        const loaded: Message[] = (data.messages ?? []).map((m: { role: string; content: string }) => ({
+        if (!res.ok || cancelled) return;
+        const loaded: Message[] = (data.messages ?? []).map((m: { role: string; content: string; meta?: { proactive?: boolean } }) => ({
           role: m.role === 'assistant' ? 'model' : 'user',
           parts: m.content,
+          proactive: m.meta?.proactive ?? false,
         }));
         setMessages(loaded);
       } finally {
@@ -41,9 +44,7 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
         setTimeout(scrollToBottom, 50);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [entityId, scrollToBottom]);
 
   const send = async () => {
@@ -53,20 +54,18 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
     const userMsg: Message = { role: 'user', parts: text };
     setMessages((m) => [...m, userMsg]);
     setLoading(true);
+    setStreaming(false);
     scrollToBottom();
 
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entityId,
-          message: text,
-        }),
+        body: JSON.stringify({ entityId, message: text }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setMessages((m) => [...m, { role: 'model', parts: `Error: ${err.error ?? res.statusText}` }]);
+        setMessages((m) => [...m, { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` }]);
         setLoading(false);
         return;
       }
@@ -75,6 +74,7 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
       const decoder = new TextDecoder();
       let full = '';
       setMessages((m) => [...m, { role: 'model', parts: '' }]);
+      setStreaming(true);
 
       if (reader) {
         while (true) {
@@ -91,6 +91,7 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
           scrollToBottom();
         }
       }
+      setStreaming(false);
 
       if (conversationId && full.trim()) {
         fetch('/api/ai/chat/finalize', {
@@ -103,62 +104,97 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
       setMessages((m) => [...m, { role: 'model', parts: `Error: ${String(e)}` }]);
     }
     setLoading(false);
+    setStreaming(false);
+    inputRef.current?.focus();
   };
 
   return (
-    <div className="flex-1 flex flex-col rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800/50 overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex-1 flex flex-col card overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 scrollbar-thin">
         {initialLoading && (
-          <p className="text-gray-500 text-sm">Loading conversation…</p>
+          <div className="flex justify-center py-8">
+            <div className="flex gap-1.5">
+              <span className="typing-dot" style={{ animationDelay: '0ms' }} />
+              <span className="typing-dot" style={{ animationDelay: '150ms' }} />
+              <span className="typing-dot" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
         )}
+
         {!initialLoading && messages.length === 0 && (
-          <p className="text-gray-500 text-sm">Chat with {entityName}. Send a message below.</p>
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-14 h-14 rounded-full bg-potato-100 dark:bg-potato-900/30 flex items-center justify-center text-2xl mb-4">
+              {entityName.charAt(0).toUpperCase()}
+            </div>
+            <p className="text-sm text-[var(--muted)] max-w-xs">
+              Start a conversation with {entityName}. They&apos;ll stay in character.
+            </p>
+          </div>
         )}
+
         {messages.map((msg, i) => (
           <div
             key={i}
-            className={
-              msg.role === 'user'
-                ? 'ml-auto max-w-[85%] rounded-lg bg-potato-100 dark:bg-potato-900/50 px-3 py-2'
-                : 'mr-auto max-w-[85%] rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-2'
-            }
+            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
           >
-            <p className="text-sm whitespace-pre-wrap">{msg.parts || '...'}</p>
+            <div className={`max-w-[80%] sm:max-w-[70%] ${
+              msg.role === 'user'
+                ? 'rounded-2xl rounded-br-md bg-potato-500 text-white px-4 py-2.5'
+                : 'rounded-2xl rounded-bl-md bg-[var(--card)] border border-[var(--card-border)] px-4 py-2.5'
+            }`}>
+              {msg.proactive && msg.role === 'model' && (
+                <span className="inline-block text-[10px] font-medium text-potato-500 mb-1 uppercase tracking-wide">
+                  {entityName} reached out
+                </span>
+              )}
+              <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.parts || '\u200B'}</p>
+            </div>
           </div>
         ))}
-        {loading && messages[messages.length - 1]?.role === 'model' && !messages[messages.length - 1].parts && (
-          <div className="mr-auto rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-2">
-            <span className="animate-pulse">Thinking…</span>
+
+        {loading && streaming && messages[messages.length - 1]?.role === 'model' && messages[messages.length - 1].parts && (
+          <div className="flex justify-start pl-2">
+            <span className="inline-block w-1.5 h-4 bg-potato-400 rounded-full animate-pulse" />
           </div>
         )}
-        {loading && messages[messages.length - 1]?.role === 'model' && messages[messages.length - 1].parts && (
-          <div className="mr-auto text-gray-400 text-xs px-1">
-            <span className="inline-block w-2 h-2 rounded-full bg-current animate-pulse" aria-hidden />
+
+        {loading && !streaming && (
+          <div className="flex justify-start animate-fade-in">
+            <div className="rounded-2xl rounded-bl-md bg-[var(--card)] border border-[var(--card-border)] px-4 py-3">
+              <div className="flex gap-1.5">
+                <span className="typing-dot" style={{ animationDelay: '0ms' }} />
+                <span className="typing-dot" style={{ animationDelay: '150ms' }} />
+                <span className="typing-dot" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
           </div>
         )}
+
         <div ref={bottomRef} />
       </div>
+
       <form
-        className="p-3 border-t border-gray-200 dark:border-gray-700 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
+        className="p-3 sm:p-4 border-t border-[var(--card-border)] flex gap-2"
+        onSubmit={(e) => { e.preventDefault(); send(); }}
       >
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Message..."
+          placeholder={`Message ${entityName}...`}
           disabled={loading}
-          className="flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+          className="input-field flex-1"
         />
         <button
           type="submit"
           disabled={loading || !input.trim()}
-          className="rounded-lg bg-potato-500 px-4 py-2 text-sm font-medium text-white hover:bg-potato-600 disabled:opacity-50"
+          className="btn-primary px-4"
+          aria-label="Send"
         >
-          Send
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19V5m0 0l-7 7m7-7l7 7" />
+          </svg>
         </button>
       </form>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 
 interface VoiceInputProps {
@@ -12,31 +12,32 @@ interface VoiceInputProps {
 export function VoiceInput({ onTranscript, disabled, className }: VoiceInputProps) {
   const {
     transcript,
-    interimTranscript,
     listening,
     browserSupportsSpeechRecognition,
     resetTranscript,
   } = useSpeechRecognition();
 
-  const fullText = (transcript || '') + (interimTranscript || '');
+  const lastSent = useRef('');
 
   useEffect(() => {
-    if (fullText) onTranscript(fullText);
-  }, [fullText, onTranscript]);
+    if (transcript && transcript !== lastSent.current) {
+      lastSent.current = transcript;
+      onTranscript(transcript);
+    }
+  }, [transcript, onTranscript]);
 
   const toggle = useCallback(() => {
     if (listening) {
       SpeechRecognition.stopListening();
     } else {
+      lastSent.current = '';
       resetTranscript();
       SpeechRecognition.startListening({ continuous: true });
     }
   }, [listening, resetTranscript]);
 
   if (!browserSupportsSpeechRecognition) {
-    return (
-      <span className="text-sm text-gray-500">Voice input not supported in this browser. Use Chrome for best support.</span>
-    );
+    return null;
   }
 
   return (
@@ -46,24 +47,20 @@ export function VoiceInput({ onTranscript, disabled, className }: VoiceInputProp
       disabled={disabled}
       className={
         className ??
-        `rounded-full p-3 transition ${
+        `rounded-full p-2.5 transition-all ${
           listening
-            ? 'bg-red-500 text-white'
-            : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-potato-100 dark:hover:bg-potato-900'
+            ? 'bg-red-500 text-white shadow-lg shadow-red-500/30 scale-110'
+            : 'bg-black/5 dark:bg-white/5 text-[var(--muted)] hover:bg-potato-100 dark:hover:bg-potato-900/30 hover:text-potato-600'
         }`
       }
       title={listening ? 'Stop listening' : 'Start voice input'}
     >
-      {listening ? (
-        <span className="sr-only">Stop</span>
-      ) : (
-        <span className="sr-only">Voice input</span>
-      )}
+      <span className="sr-only">{listening ? 'Stop' : 'Voice input'}</span>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 24 24"
         fill="currentColor"
-        className="w-6 h-6"
+        className="w-5 h-5"
         aria-hidden
       >
         <path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" />

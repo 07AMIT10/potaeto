@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { SHARE_CONTENT_LIMIT } from '@/lib/config';
 import { redirect } from 'next/navigation';
 import { ShareUI } from './ShareUI';
 
@@ -20,11 +21,14 @@ export default async function SharePage() {
     .select('id, type, public_url, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(30);
+    .limit(SHARE_CONTENT_LIMIT);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-potato-800">Share</h1>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="page-title">Share</h1>
+        <p className="text-[var(--muted)] text-sm mt-1">Manage your public profiles and content links.</p>
+      </div>
       <ShareUI entities={entities ?? []} content={content ?? []} />
     </div>
   );

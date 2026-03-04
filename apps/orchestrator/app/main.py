@@ -13,6 +13,34 @@ from app.skills.service import SkillsService
 
 app = FastAPI(title="Potaeto Orchestrator")
 router = ModelRouter()
+skills_service = SkillsService(router=router, supabase=router._supabase)
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    """Warm caches on startup so the first request doesn't pay the full DB cost."""
+    for task in ("chat_primary", "summarize", "skill_text"):
+        try:
+            router._models_cache.get(task)
+        except Exception:
+            ...
+
+
+@app.get("/v1/health")
+async def health_check() -> Any:
+    """Provider health snapshot for admin dashboard."""
+    return {
+        "status": "ok",
+        "providers": router.health.snapshot_all(),
+    }
+
+
+@app.post("/v1/cache/invalidate")
+async def invalidate_cache() -> Any:
+    """Force-refresh cached models_config and skills. Call after admin changes."""
+    router.invalidate_cache()
+    SkillsService._cache.clear()
+    return {"status": "ok", "message": "Caches invalidated"}
 
 
 class ChatMessage(BaseModel):
@@ -132,7 +160,6 @@ class SkillInvokeResponse(BaseModel):
 @app.post("/v1/skills/{skill_id}/invoke", response_model=SkillInvokeResponse)
 async def invoke_skill(skill_id: str, req: SkillInvokeRequest) -> Any:
     """Invoke a skill by id. Uses pipeline_config from DB when present, else legacy fallback."""
-    skills_service = SkillsService(router)
     pipeline_output = await skills_service.run(
         skill_id=skill_id,
         prompt=req.prompt,
@@ -222,4 +249,50 @@ async def parse_entity(req: ParseEntityRequest) -> Any:
         skills=data.get("skills") or [],
         attributes=data.get("attributes") or {},
     )
+
+
+class ProactiveRequest(BaseModel):
+    entity_name: str
+    persona: dict[str, Any] | None = None
+    summary: str | None = None
+    recent_facts: list[str] | None = None
+    topic: str | None = None
+
+
+class ProactiveResponse(BaseModel):
+    message: str
+
+
+@app.post("/v1/proactive", response_model=ProactiveResponse)
+async def proactive_message(req: ProactiveRequest) -> Any:
+    """Generate a short, in-character proactive message from the entity to the user."""
+    context_parts = [
+        f'You are "{req.entity_name}", a character/persona.',
+    ]
+    if req.persona:
+        context_parts.append(f"Persona: {req.persona}")
+    if req.summary:
+        context_parts.append(f"Conversation summary so far: {req.summary}")
+    if req.recent_facts:
+        facts = "\n".join(f"- {f}" for f in req.recent_facts)
+        context_parts.append(f"Known facts about the user:\n{facts}")
+
+    context_parts.append(
+        "\nGenerate a single short, friendly message to re-engage the user. "
+        "Options: ask how their day was, ask about something they mentioned, "
+        "share something interesting in character, or just say hi warmly. "
+        "One to two sentences max. No lists, no bullet points. Stay in character."
+    )
+
+    if req.topic:
+        context_parts.append(f'\nSpecifically ask about or reference: "{req.topic}"')
+
+    system_message = TextMessage(role="system", content="\n".join(context_parts))
+    user_message = TextMessage(role="user", content="Generate the proactive message now.")
+
+    result = await router.generate_text(
+        task_type="proactive_message",
+        messages=[system_message, user_message],
+    )
+    return ProactiveResponse(message=result.content.strip())
 

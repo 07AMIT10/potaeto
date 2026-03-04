@@ -1,118 +1,21 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { ADMIN_USAGE_LOGS_LIMIT } from '@/lib/config';
+import { ModelsAdmin } from './ModelsAdmin';
 
 export default async function AdminModelsPage() {
   const supabase = createServiceClient();
 
   const { data: models } = await supabase
     .from('models_config')
-    .select('id, provider, model_key, task_type, priority, enabled, temperature, max_output_tokens')
+    .select('id, provider, model_key, display_name, task_type, priority, enabled, temperature, max_output_tokens')
     .order('task_type')
     .order('priority');
 
-  const { data: usage } = await supabase
+  const { data: allLogs } = await supabase
     .from('model_usage_logs')
     .select('task_type, provider, model_key, success, latency_ms')
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(ADMIN_USAGE_LOGS_LIMIT);
 
-  const byModel = new Map<
-    string,
-    { calls: number; errors: number; avgLatency: number | null }
-  >();
-
-  for (const row of usage ?? []) {
-    const key = `${row.task_type}:${row.provider}:${row.model_key}`;
-    const current = byModel.get(key) ?? { calls: 0, errors: 0, avgLatency: null };
-    const latency = typeof row.latency_ms === 'number' ? row.latency_ms : null;
-    const totalLatency =
-      (current.avgLatency ?? 0) * current.calls + (latency ?? 0);
-    const calls = current.calls + 1;
-    const avgLatency = calls > 0 ? Math.round(totalLatency / calls) : null;
-    byModel.set(key, {
-      calls,
-      errors: current.errors + (row.success ? 0 : 1),
-      avgLatency,
-    });
-  }
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-bold text-potato-800 dark:text-potato-200 mb-1">
-          Models & routing
-        </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Configured models by task type and recent routing stats.
-        </p>
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-gray-700">Configured models</h2>
-        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900/60">
-          <table className="min-w-full text-xs">
-            <thead className="bg-gray-50 dark:bg-gray-800">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Task</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Provider</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Model key</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Priority</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Enabled</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Temp</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Max tokens</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-500">Calls / Errors / Avg ms</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(models ?? []).map((m) => {
-                const key = `${m.task_type}:${m.provider}:${m.model_key}`;
-                const stats = byModel.get(key);
-                return (
-                  <tr key={m.id} className="border-t border-gray-100 dark:border-gray-800">
-                    <td className="px-3 py-2 whitespace-nowrap">{m.task_type}</td>
-                    <td className="px-3 py-2 whitespace-nowrap">{m.provider}</td>
-                    <td className="px-3 py-2 font-mono text-[11px] break-all">{m.model_key}</td>
-                    <td className="px-3 py-2 text-center">{m.priority}</td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={
-                          m.enabled
-                            ? 'inline-flex items-center rounded-full bg-green-50 text-green-700 px-2 py-0.5 text-[10px]'
-                            : 'inline-flex items-center rounded-full bg-gray-100 text-gray-500 px-2 py-0.5 text-[10px]'
-                        }
-                      >
-                        {m.enabled ? 'enabled' : 'disabled'}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">{m.temperature ?? '—'}</td>
-                    <td className="px-3 py-2 text-center">{m.max_output_tokens ?? '—'}</td>
-                    <td className="px-3 py-2 text-xs text-gray-600">
-                      {stats
-                        ? `${stats.calls} / ${stats.errors} / ${
-                            stats.avgLatency !== null ? stats.avgLatency : '—'
-                          }`
-                        : '—'}
-                    </td>
-                  </tr>
-                );
-              })}
-              {(!models || models.length === 0) && (
-                <tr>
-                  <td
-                    className="px-3 py-4 text-center text-xs text-gray-500"
-                    colSpan={8}
-                  >
-                    No models configured yet. Seed the models_config table to start routing.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <p className="text-[11px] text-gray-500">
-          Editing (add / remove / toggle models) is currently done via SQL or Supabase dashboard.
-        </p>
-      </section>
-    </div>
-  );
+  return <ModelsAdmin initialModels={models ?? []} initialLogs={allLogs ?? []} />;
 }
-

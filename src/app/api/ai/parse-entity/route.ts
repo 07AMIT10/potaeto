@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8000';
+import { ORCHESTRATOR_URL } from '@/lib/config';
 
 export async function POST(request: Request) {
   const supabase = await createClient();

@@ -32,10 +32,15 @@ export default async function CreatePage({
     .order('created_at', { ascending: false });
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-potato-800">
-        {entity ? `Edit ${entity.name}` : 'Create or edit WHO/WHAT'}
-      </h1>
+    <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+      <div>
+        <h1 className="page-title">
+          {entity ? `Edit ${entity.name}` : 'Create or edit'}
+        </h1>
+        <p className="text-[var(--muted)] text-sm mt-1">
+          {entity ? 'Fine-tune your character details.' : 'Set up your character\'s profile and traits.'}
+        </p>
+      </div>
       <CreateForm entity={entity} entitiesList={entities.data ?? []} />
     </div>
   );
