@@ -1,5 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
-import { ADMIN_USAGE_LOGS_LIMIT } from '@/lib/config';
+import { ADMIN_USAGE_LOGS_LIMIT, ORCHESTRATOR_URL } from '@/lib/config';
 import { NextResponse } from 'next/server';
 
 function checkAdmin(request: Request): boolean {
@@ -50,6 +50,9 @@ export async function PATCH(request: Request) {
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  fetch(`${ORCHESTRATOR_URL}/v1/cache/invalidate`, { method: 'POST' }).catch(() => {});
+
   return NextResponse.json(data);
 }
 

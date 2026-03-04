@@ -13,6 +13,17 @@ from app.skills.service import SkillsService
 
 app = FastAPI(title="Potaeto Orchestrator")
 router = ModelRouter()
+skills_service = SkillsService(router=router, supabase=router._supabase)
+
+
+@app.on_event("startup")
+async def startup_event() -> None:
+    """Warm caches on startup so the first request doesn't pay the full DB cost."""
+    for task in ("chat_primary", "summarize", "skill_text"):
+        try:
+            router._models_cache.get(task)
+        except Exception:
+            ...
 
 
 @app.get("/v1/health")
@@ -22,6 +33,14 @@ async def health_check() -> Any:
         "status": "ok",
         "providers": router.health.snapshot_all(),
     }
+
+
+@app.post("/v1/cache/invalidate")
+async def invalidate_cache() -> Any:
+    """Force-refresh cached models_config and skills. Call after admin changes."""
+    router.invalidate_cache()
+    SkillsService._cache.clear()
+    return {"status": "ok", "message": "Caches invalidated"}
 
 
 class ChatMessage(BaseModel):
@@ -141,7 +160,6 @@ class SkillInvokeResponse(BaseModel):
 @app.post("/v1/skills/{skill_id}/invoke", response_model=SkillInvokeResponse)
 async def invoke_skill(skill_id: str, req: SkillInvokeRequest) -> Any:
     """Invoke a skill by id. Uses pipeline_config from DB when present, else legacy fallback."""
-    skills_service = SkillsService(router)
     pipeline_output = await skills_service.run(
         skill_id=skill_id,
         prompt=req.prompt,

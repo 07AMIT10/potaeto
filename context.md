@@ -144,6 +144,33 @@ The orchestrator's `ModelRouter` uses a `ProviderHealthTracker` (`app/router/hea
 - **Responsive:** All pages stack vertically on mobile with touch-friendly button sizes.
 - **Scrollbar:** Custom thin scrollbar (`scrollbar-thin` class).
 
+## Configuration
+
+All tunable values are centralized:
+- **Next.js:** `src/lib/config.ts` — all limits, URLs, thresholds as env-driven constants.
+- **Orchestrator:** `apps/orchestrator/app/config.py` — `HealthSettings`, `RoutingSettings`, `SupabaseSettings`, `GeminiSettings`, all env-driven with sensible defaults.
+- **`.env.example`:** Documents every available env var with defaults.
+- **No hardcoded magic numbers** in API routes or components — everything imports from config.
+
+## Deployment
+
+- **Frontend (Next.js):** Deploy to Vercel (or any Node.js host). Set env vars from `.env.example`.
+- **Orchestrator (FastAPI):** Deploy to Render using `render.yaml` blueprint. Dockerfile at `apps/orchestrator/Dockerfile`.
+  - Health check: `GET /v1/health` (used by Render for liveness).
+  - Single worker (`--workers 1`) for free tier memory constraints.
+  - `--timeout-keep-alive 65` to survive Render's 60s proxy timeout.
+  - Startup warm-up: pre-loads models_config cache for common task types.
+  - Cache invalidation: `POST /v1/cache/invalidate` (called automatically after admin model config changes).
+
+## Free-Tier Optimizations
+
+- **models_config cache:** TTL-based in-memory cache (`MODELS_CONFIG_CACHE_TTL_SEC`, default 60s) avoids hitting Supabase on every request. Admin changes trigger `POST /v1/cache/invalidate`.
+- **skills config cache:** Skill pipeline_config cached in-memory (120s TTL).
+- **Shared Supabase client:** SkillsService reuses the router's client instead of creating a new one per request.
+- **Startup warm-up:** On boot, pre-loads models_config for chat_primary, summarize, skill_text to reduce first-request latency after Render cold start.
+- **Config-driven providers:** Only providers listed in `ENABLED_PROVIDERS` are initialized, saving memory and startup time.
+- **Single uvicorn worker:** Fits in Render free tier's 512MB RAM.
+
 ## Conventions
 
 - **Scalability:** Server-side Gemini only; Supabase RLS for multi-tenant isolation; stateless API routes so you can scale horizontally.
@@ -194,3 +221,6 @@ The orchestrator's `ModelRouter` uses a `ProviderHealthTracker` (`app/router/hea
 7. **Admin overview:** Added model usage health card showing total API calls, recent error rate, success rate, and top provider.
 8. **Smart routing algorithm:** `ProviderHealthTracker` in orchestrator with per-model health tracking, exponential cooldown on 429s, health-penalty re-ranking, and fallback-to-cooling-down logic. Live health visible in admin panel with auto-refresh.
 9. **Orchestrator health endpoint:** `GET /v1/health` returns live provider health snapshots. Proxied via `GET /api/admin/health` for admin panel.
+10. **Config centralization:** `src/lib/config.ts` for Next.js, `apps/orchestrator/app/config.py` for orchestrator. All hardcoded limits, URLs, thresholds extracted to env-driven config. 50+ values now configurable via env vars.
+11. **Render deployment:** Dockerfile, render.yaml blueprint, .dockerignore, health check endpoint, startup warm-up.
+12. **Free-tier optimizations:** models_config TTL cache, skills config cache, shared Supabase client, startup warm-up, config-driven provider lazy loading, cache invalidation on admin changes.
