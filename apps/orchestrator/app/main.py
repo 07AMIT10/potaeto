@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.router.model_router import ModelRouter, TaskType
 from app.providers.base import TextMessage
+from app.skills.service import SkillsService
 
 
 app = FastAPI(title="Potaeto Orchestrator")
@@ -32,6 +34,25 @@ async def chat(req: ChatRequest) -> Any:
     msgs = [TextMessage(role=m.role, content=m.content) for m in req.messages]
     result = await router.generate_text(task_type=req.task_type, messages=msgs)
     return ChatResponse(content=result.content)
+
+
+async def _chat_stream_generator(req: ChatRequest):
+    msgs = [TextMessage(role=m.role, content=m.content) for m in req.messages]
+    async for chunk in router.generate_text_stream(task_type=req.task_type, messages=msgs):
+        if isinstance(chunk, str):
+            yield chunk.encode("utf-8")
+        else:
+            yield chunk
+
+
+@app.post("/v1/chat/stream")
+async def chat_stream(req: ChatRequest) -> StreamingResponse:
+    """Stream chat response as plain text chunks. Client can use getReader() for token-by-token UX."""
+    return StreamingResponse(
+        _chat_stream_generator(req),
+        media_type="text/plain; charset=utf-8",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 class SummarizeRequest(BaseModel):
@@ -110,48 +131,33 @@ class SkillInvokeResponse(BaseModel):
 
 @app.post("/v1/skills/{skill_id}/invoke", response_model=SkillInvokeResponse)
 async def invoke_skill(skill_id: str, req: SkillInvokeRequest) -> Any:
-    """Generic skill invocation endpoint.
-
-    For now, we implement a first concrete skill: `songwriter`.
-    Other skills can be added by extending the system prompt logic here
-    or by delegating to a dedicated skills service.
-    """
-    base_system = (
-        "You are an AI assistant.\n"
-        "Follow the skill-specific instructions to produce the best output."
+    """Invoke a skill by id. Uses pipeline_config from DB when present, else legacy fallback."""
+    skills_service = SkillsService(router)
+    pipeline_output = await skills_service.run(
+        skill_id=skill_id,
+        prompt=req.prompt,
+        entity_name=req.entity_name,
+        persona=req.persona,
     )
+    if pipeline_output:
+        return SkillInvokeResponse(output=pipeline_output)
 
-    if skill_id == "songwriter":
-        system_instructions = (
-            "You are a creative songwriter helping a user craft lyrics.\n"
-            "Write singable, emotionally engaging lyrics.\n"
-            "Respect any style, mood, or constraints given by the user.\n"
-            "Keep the output as lyrics only (no explanations)."
-        )
-    else:
-        system_instructions = (
-            "You are a helpful assistant.\n"
-            "The user is invoking a generic skill; respond with your best effort."
-        )
+    # Legacy fallback when skill has no pipeline_config (e.g. songwriter before seed)
+    from app.skills.prompts import get_system_prompt
 
+    template_id = "songwriter_v1" if skill_id == "songwriter" else None
+    system_content = get_system_prompt(template_id)
     persona_suffix = ""
     if req.entity_name:
-        persona_suffix += f'\nThe lyrics are for the persona "{req.entity_name}".'
+        persona_suffix += f'\nThe output is for the persona "{req.entity_name}".'
     if req.persona:
         persona_suffix += f"\nPersona details (JSON): {req.persona}"
-
-    system_message = TextMessage(
-        role="system",
-        content=f"{base_system}\n\n{system_instructions}{persona_suffix}",
-    )
-
+    system_message = TextMessage(role="system", content=f"{system_content}{persona_suffix}")
     user_message = TextMessage(role="user", content=req.prompt)
-
     result = await router.generate_text(
         task_type="skill_text",
         messages=[system_message, user_message],
     )
-
     return SkillInvokeResponse(output=result.content.strip())
 
 
