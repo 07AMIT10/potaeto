@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 
 interface ModelRow {
   id: string;
@@ -77,13 +77,52 @@ function computeStats(logs: LogRow[]) {
   return { providers, tasks, models, totalCalls, totalErrors };
 }
 
+interface HealthEntry {
+  provider: string;
+  model_key: string;
+  success_rate: number;
+  is_cooling_down: boolean;
+  cooldown_remaining_sec: number;
+  consecutive_rate_limits: number;
+  consecutive_errors: number;
+  total_calls: number;
+  total_errors: number;
+  total_rate_limits: number;
+  health_penalty: number;
+}
+
 export function ModelsAdmin({ initialModels, initialLogs }: Props) {
   const [models, setModels] = useState(initialModels);
   const [saving, setSaving] = useState<string | null>(null);
   const [editingRow, setEditingRow] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<{ priority: number; temperature: string; max_output_tokens: string }>({ priority: 0, temperature: '', max_output_tokens: '' });
+  const [liveHealth, setLiveHealth] = useState<HealthEntry[]>([]);
+  const [healthError, setHealthError] = useState<string | null>(null);
 
   const stats = useMemo(() => computeStats(initialLogs), [initialLogs]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch('/api/admin/health');
+        if (!res.ok) {
+          setHealthError('Orchestrator offline');
+          return;
+        }
+        const data = await res.json();
+        if (!cancelled) {
+          setLiveHealth(data.providers ?? []);
+          setHealthError(null);
+        }
+      } catch {
+        if (!cancelled) setHealthError('Cannot reach orchestrator');
+      }
+    };
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   const updateModel = useCallback(async (id: string, updates: Record<string, unknown>) => {
     setSaving(id);
@@ -200,6 +239,102 @@ export function ModelsAdmin({ initialModels, initialLogs }: Props) {
           </div>
         </section>
       )}
+
+      {/* Live provider health from orchestrator */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold">Live provider health</h3>
+          <span className="text-[10px] text-[var(--muted)]">Auto-refreshes every 10s</span>
+        </div>
+        {healthError ? (
+          <div className="card p-4 text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+            {healthError} &mdash; smart routing runs inside the orchestrator. Start it to see live health.
+          </div>
+        ) : liveHealth.length === 0 ? (
+          <div className="card p-4 text-sm text-[var(--muted)]">No routing data yet. Make some API calls first.</div>
+        ) : (
+          <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--card-border)] bg-black/[0.02] dark:bg-white/[0.02]">
+                    <th className="px-4 py-2.5 text-left font-medium text-[var(--muted)]">Provider</th>
+                    <th className="px-4 py-2.5 text-left font-medium text-[var(--muted)]">Model</th>
+                    <th className="px-4 py-2.5 text-center font-medium text-[var(--muted)]">Health</th>
+                    <th className="px-4 py-2.5 text-center font-medium text-[var(--muted)]">Status</th>
+                    <th className="px-4 py-2.5 text-center font-medium text-[var(--muted)]">Cooldown</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-[var(--muted)]">Rate limits</th>
+                    <th className="px-4 py-2.5 text-right font-medium text-[var(--muted)]">Errors (consec)</th>
+                    <th className="px-4 py-2.5 text-center font-medium text-[var(--muted)]">Penalty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveHealth.map((h) => (
+                    <tr key={`${h.provider}:${h.model_key}`} className={`border-b border-[var(--card-border)] last:border-0 ${h.is_cooling_down ? 'bg-red-50/50 dark:bg-red-900/10' : ''}`}>
+                      <td className="px-4 py-2.5 capitalize font-medium">{h.provider}</td>
+                      <td className="px-4 py-2.5 font-mono text-[11px]">{h.model_key}</td>
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-medium ${
+                          h.success_rate >= 90 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' :
+                          h.success_rate >= 50 ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300' :
+                          'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        }`}>
+                          {h.success_rate}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {h.is_cooling_down ? (
+                          <span className="inline-flex items-center gap-1 text-red-500 font-medium">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                            cooling
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-green-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                            ready
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center text-[var(--muted)]">
+                        {h.cooldown_remaining_sec > 0 ? `${h.cooldown_remaining_sec}s` : '\u2014'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {h.total_rate_limits > 0 ? (
+                          <span className="text-red-500 font-medium">{h.total_rate_limits} ({h.consecutive_rate_limits} consec)</span>
+                        ) : (
+                          <span className="text-[var(--muted)]">0</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {h.consecutive_errors > 0 ? (
+                          <span className="text-amber-500 font-medium">{h.consecutive_errors}</span>
+                        ) : (
+                          <span className="text-[var(--muted)]">0</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {h.health_penalty > 0 ? (
+                          <span className="text-red-500 font-medium">+{h.health_penalty}</span>
+                        ) : (
+                          <span className="text-green-600">0</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+        <p className="text-[10px] text-[var(--muted)] leading-relaxed max-w-3xl">
+          The smart router skips models in cooldown and re-ranks by effective priority (base + health penalty).
+          A 429 rate-limit triggers exponential cooldown (15s &rarr; 5min). Other errors use shorter cooldown (3s &rarr; 30s).
+          When all healthy models fail, cooling-down models are tried as last resort (nearest-to-recovery first).
+        </p>
+      </section>
 
       {/* Per-task breakdown */}
       {stats.tasks.length > 0 && (

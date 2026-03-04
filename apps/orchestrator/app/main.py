@@ -15,6 +15,15 @@ app = FastAPI(title="Potaeto Orchestrator")
 router = ModelRouter()
 
 
+@app.get("/v1/health")
+async def health_check() -> Any:
+    """Provider health snapshot for admin dashboard."""
+    return {
+        "status": "ok",
+        "providers": router.health.snapshot_all(),
+    }
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str

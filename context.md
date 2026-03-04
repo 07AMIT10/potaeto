@@ -20,6 +20,7 @@ Potaeto is a user-friendly, multiplatform MVP app where users:
 - **Backend / BaaS:** Supabase (Auth, Postgres, Storage, RLS, pgvector).
 - **Orchestrator:** Python FastAPI in `apps/orchestrator`; routes by `models_config` (Gemini, Groq, Hugging Face); logs to `model_usage_logs`. Endpoints: `POST /v1/chat`, `POST /v1/chat/stream`, `POST /v1/summarize`, `POST /v1/skills/{id}/invoke`, `POST /v1/parse-entity`, `POST /v1/proactive`. **Skills:** `app/skills/service.py` (SkillsService) loads `skills.pipeline_config` from DB and runs steps (llm, postprocess); prompt templates in `app/skills/prompts.py`. Migration `20260301000015_skills_pipeline_config_seed.sql` seeds songwriter with pipeline_config.
 - **AI:** Google Gemini API (text, image, TTS) + optional Groq + Hugging Face-backed models, all abstracted behind the orchestrator for most flows. Default text model for direct Gemini usage: `gemini-2.5-flash`. Override with env: `GEMINI_MODEL`, `GEMINI_SUMMARY_MODEL`, `GEMINI_IMAGE_MODEL`, `GEMINI_TTS_MODEL`. Optional: user-provided Gemini API key in profile.
+- **Smart Router:** `ProviderHealthTracker` in orchestrator tracks per-(provider, model_key) health with rolling success rate, exponential cooldown on 429s, and health-penalty-based re-ranking. See "Smart Routing Algorithm" section below.
 - **Voice input:** `react-speech-recognition` (Web Speech API) for "describe WHO/WHAT" by voice.
 
 ## Repo Structure
@@ -105,6 +106,35 @@ Storage buckets: `avatars`, `content` (public URLs for shareable content).
 - **Scheduling:** Can be called by Supabase pg_cron + Edge Function, Cloudflare Cron Worker, or manual admin trigger. Same contract.
 - **ChatUI:** Proactive messages display with a subtle "{entity} reached out" label above the message bubble.
 
+## Smart Routing Algorithm
+
+The orchestrator's `ModelRouter` uses a `ProviderHealthTracker` (`app/router/health.py`) for intelligent provider selection:
+
+**How it works:**
+1. Load enabled models for the task_type from DB, sorted by base priority.
+2. Split into AVAILABLE (not cooling down) and COOLING_DOWN lists.
+3. Sort AVAILABLE by effective_priority = base_priority + health_penalty:
+   - 0 penalty if success_rate >= 90% (healthy)
+   - +50 if 50-90% (degraded)
+   - +200 if < 50% (unhealthy)
+   This means a priority-1 model with terrible health (effective 201) is tried AFTER a healthy priority-10 model.
+4. Try AVAILABLE models in effective order. On success, done.
+5. If all AVAILABLE fail, try COOLING_DOWN as last resort (nearest-to-recovery first).
+
+**Cooldown on errors:**
+- **429 / rate-limit**: Exponential backoff starting at 15s, doubling each consecutive 429 (15 → 30 → 60 → 120 → 300s max). The model is SKIPPED for new requests during cooldown, so traffic flows to other providers instead of extending the rate-limit window.
+- **Other errors (500, network)**: Shorter backoff (3s → 6s → 12s → ... → 30s max).
+- **On success**: Consecutive error counters reset, model returns to normal.
+
+**Health tracking:**
+- Per-(provider, model_key) — different models on the same provider tracked independently.
+- Rolling window of last 30 outcomes for success rate calculation.
+- Thread-safe, in-memory (resets on orchestrator restart — intentional, avoids stale state).
+
+**Admin visibility:**
+- `GET /v1/health` on orchestrator returns live health snapshots.
+- `/admin/models` shows live health table (auto-refreshes every 10s): success rate, cooldown status, consecutive rate limits, health penalty.
+
 ## Design System (UI/UX)
 
 - **Palette:** Warm potato-themed (`potato-50` to `potato-950`). CSS variables: `--foreground`, `--background`, `--card`, `--card-border`, `--muted`, `--accent`.
@@ -162,3 +192,5 @@ Storage buckets: `avatars`, `content` (public URLs for shareable content).
 5. **Admin dashboard:** Enhanced with conversation count, message count, skill output count, pipeline_config status indicators, and memory kind badges.
 6. **Admin models page rewrite:** Full model management dashboard with per-provider usage breakdown, per-task breakdown, all-time stats, inline editing (toggle enabled, change priority/temperature/max_output_tokens), and admin PATCH API.
 7. **Admin overview:** Added model usage health card showing total API calls, recent error rate, success rate, and top provider.
+8. **Smart routing algorithm:** `ProviderHealthTracker` in orchestrator with per-model health tracking, exponential cooldown on 429s, health-penalty re-ranking, and fallback-to-cooling-down logic. Live health visible in admin panel with auto-refresh.
+9. **Orchestrator health endpoint:** `GET /v1/health` returns live provider health snapshots. Proxied via `GET /api/admin/health` for admin panel.
