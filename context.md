@@ -66,6 +66,8 @@ src/
       entities/[entityId]/skill-outputs/ # GET: recent skill_outputs for entity (for Skills history UI)
       conversations/[entityId]/messages/  # GET: load persisted chat history (includes meta for proactive labels)
       proactive/trigger/   # POST: trigger proactive messages for idle conversations (admin-protected)
+      admin/
+        models/            # GET: aggregated usage stats; PATCH: update model config (admin-protected)
     admin/                 # Admin dashboard (metrics, models, skills, memory/logs)
   components/
     SkillsSection.tsx     # Skills block: collapsible, songwriter card + recent outputs list + detail modal
@@ -133,12 +135,16 @@ Storage buckets: `avatars`, `content` (public URLs for shareable content).
 
 ## Admin
 
-- Admin overview at `/admin` (protected via `ADMIN_SECRET` header): users, entities, content, conversations, messages, skill outputs.
-- `/admin/models`: read-only view of `models_config` and recent `model_usage_logs` stats.
+- Admin overview at `/admin` (protected via `ADMIN_SECRET` header): users, entities, content, conversations, messages, skill outputs, **plus model usage health card** (total API calls, recent error rate, success %, top provider).
+- `/admin/models`: **Full model management dashboard** with:
+  - **Usage summary cards**: total API calls, total errors, success rate, active providers.
+  - **Per-provider breakdown**: calls, errors, success rate, avg latency, usage share bar per provider.
+  - **Per-task breakdown**: calls and errors per task type (chat_primary, summarize, skill_text, etc.) with share percentages.
+  - **Configured models table** with **inline editing**: toggle enabled/disabled (switch), edit priority/temperature/max_output_tokens. All-time per-model stats (calls, errors, avg ms).
+  - **API**: `PATCH /api/admin/models` to update model config. `GET /api/admin/models` returns aggregated usage stats.
 - `/admin/skills`: read-only view of `skills` catalog + `entity_skills` usage + pipeline_config status.
 - `/admin/memory`: read-only view of recent `conversation_summaries`, `memories`, and `model_usage_logs`.
 - **Implemented:** `src/app/admin/layout.tsx` provides shared layout: auth check (ADMIN_SECRET), sticky header with nav icons (Overview, Models, Skills, Memory & Logs).
-- Editing (models/skills, toggles) is still via SQL / Supabase dashboard for now.
 
 ## Conventions for maintainability
 
@@ -154,3 +160,5 @@ Storage buckets: `avatars`, `content` (public URLs for shareable content).
 3. **Proactive messaging:** New orchestrator endpoint (`POST /v1/proactive`), new `proactive_message` task type, trigger API (`POST /api/proactive/trigger`) with idle detection, and ChatUI proactive message labels.
 4. **VoiceInput fix:** Prevents duplicate/repeated transcript sends using ref tracking.
 5. **Admin dashboard:** Enhanced with conversation count, message count, skill output count, pipeline_config status indicators, and memory kind badges.
+6. **Admin models page rewrite:** Full model management dashboard with per-provider usage breakdown, per-task breakdown, all-time stats, inline editing (toggle enabled, change priority/temperature/max_output_tokens), and admin PATCH API.
+7. **Admin overview:** Added model usage health card showing total API calls, recent error rate, success rate, and top provider.
