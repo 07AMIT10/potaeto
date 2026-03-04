@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { ADMIN_USAGE_LOGS_LIMIT } from '@/lib/config';
 import { ModelsAdmin } from './ModelsAdmin';
 
 export default async function AdminModelsPage() {
@@ -14,7 +15,7 @@ export default async function AdminModelsPage() {
     .from('model_usage_logs')
     .select('task_type, provider, model_key, success, latency_ms')
     .order('created_at', { ascending: false })
-    .limit(5000);
+    .limit(ADMIN_USAGE_LOGS_LIMIT);
 
   return <ModelsAdmin initialModels={models ?? []} initialLogs={allLogs ?? []} />;
 }

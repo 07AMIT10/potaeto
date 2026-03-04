@@ -1,8 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
-const RECENT_MESSAGES_LIMIT = 10;
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8000';
+import { ORCHESTRATOR_URL, CHAT_RECENT_MESSAGES_LIMIT, CHAT_MEMORIES_LIMIT } from '@/lib/config';
 
 function buildSystemPrompt(entity: {
   name: string;
@@ -95,7 +93,7 @@ export async function POST(request: Request) {
     .eq('entity_id', entityId)
     .in('kind', ['fact', 'preference'])
     .order('created_at', { ascending: false })
-    .limit(5);
+    .limit(CHAT_MEMORIES_LIMIT);
   if (memoriesError) {
     console.error('memories fetch error:', memoriesError);
   }
@@ -107,7 +105,7 @@ export async function POST(request: Request) {
     .eq('user_id', user.id)
     .in('role', ['user', 'assistant'])
     .order('created_at', { ascending: false })
-    .limit(RECENT_MESSAGES_LIMIT);
+    .limit(CHAT_RECENT_MESSAGES_LIMIT);
 
   if (recentMessagesError) {
     console.error('recent messages error:', recentMessagesError);

@@ -1,9 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8000';
-const IDLE_HOURS = 24;
-const MAX_PER_RUN = 10;
+import { ORCHESTRATOR_URL, PROACTIVE_IDLE_HOURS, PROACTIVE_MAX_PER_RUN, PROACTIVE_FACTS_LIMIT } from '@/lib/config';
 
 /**
  * POST /api/proactive/trigger
@@ -25,14 +22,14 @@ export async function POST(request: Request) {
 
   const supabase = createServiceClient();
 
-  const cutoff = new Date(Date.now() - IDLE_HOURS * 60 * 60 * 1000).toISOString();
+  const cutoff = new Date(Date.now() - PROACTIVE_IDLE_HOURS * 60 * 60 * 1000).toISOString();
 
   const { data: idleConversations, error: convError } = await supabase
     .from('conversations')
     .select('id, user_id, entity_id, updated_at')
     .lt('updated_at', cutoff)
     .order('updated_at', { ascending: true })
-    .limit(MAX_PER_RUN);
+    .limit(PROACTIVE_MAX_PER_RUN);
 
   if (convError) {
     console.error('proactive trigger: conversation query error', convError);
@@ -56,7 +53,7 @@ export async function POST(request: Request) {
   let triggered = 0;
   const errors: string[] = [];
 
-  for (const conv of eligible.slice(0, MAX_PER_RUN)) {
+  for (const conv of eligible.slice(0, PROACTIVE_MAX_PER_RUN)) {
     try {
       const { data: entity } = await supabase
         .from('entities')
@@ -79,7 +76,7 @@ export async function POST(request: Request) {
         .eq('entity_id', conv.entity_id)
         .in('kind', ['fact', 'preference'])
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(PROACTIVE_FACTS_LIMIT);
 
       const res = await fetch(`${ORCHESTRATOR_URL}/v1/proactive`, {
         method: 'POST',

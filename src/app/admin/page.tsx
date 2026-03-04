@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { ADMIN_LOGS_LIMIT } from '@/lib/config';
 import Link from 'next/link';
 
 export default async function AdminPage() {
@@ -24,7 +25,7 @@ export default async function AdminPage() {
       .from('model_usage_logs')
       .select('provider, success, latency_ms')
       .order('created_at', { ascending: false })
-      .limit(1000),
+      .limit(ADMIN_LOGS_LIMIT),
   ]);
 
   const platformStats = [

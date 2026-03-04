@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { ADMIN_MEMORY_LIMIT, ADMIN_ROUTING_LOGS_LIMIT } from '@/lib/config';
 
 function truncateId(id: string) {
   return id.length > 12 ? id.slice(0, 8) + '\u2026' : id;
@@ -12,17 +13,17 @@ export default async function AdminMemoryPage() {
       .from('conversation_summaries')
       .select('conversation_id, user_id, entity_id, summary, updated_at')
       .order('updated_at', { ascending: false })
-      .limit(30),
+      .limit(ADMIN_MEMORY_LIMIT),
     supabase
       .from('memories')
       .select('id, user_id, entity_id, kind, content, weight, created_at')
       .order('created_at', { ascending: false })
-      .limit(30),
+      .limit(ADMIN_MEMORY_LIMIT),
     supabase
       .from('model_usage_logs')
       .select('created_at, task_type, provider, model_key, success, latency_ms, error_message')
       .order('created_at', { ascending: false })
-      .limit(50),
+      .limit(ADMIN_ROUTING_LOGS_LIMIT),
   ]);
 
   return (

@@ -1,22 +1,6 @@
 """
-Smart Model Router with health-aware provider selection.
-
-Routing algorithm:
-  1. Load enabled models for the task_type from DB, sorted by base priority.
-  2. Partition into two lists:
-     a) AVAILABLE — not currently in cooldown
-     b) COOLING_DOWN — in cooldown (rate-limited or erroring)
-  3. Sort AVAILABLE by effective_priority = base_priority + health_penalty.
-     health_penalty is 0 for healthy (>=90% success), +50 for degraded,
-     +200 for unhealthy (<50% success). This re-ranks without hard-removing.
-  4. Try models from AVAILABLE in order. On success → done.
-  5. If ALL available models fail, try COOLING_DOWN models as last resort
-     (sorted by who has the least cooldown remaining — closest to recovery).
-  6. On 429/rate-limit: exponential cooldown (15s → 30s → 60s → ... → 5min).
-     On other errors: shorter cooldown (3s → 6s → 12s → ... → 30s).
-     On success: reset consecutive counters.
-  7. Log every attempt to model_usage_logs with metadata including
-     effective_priority and whether the model was in cooldown.
+Smart Model Router with config-driven providers, models_config caching,
+and health-aware selection.
 """
 
 from __future__ import annotations
@@ -30,9 +14,6 @@ from supabase import create_client, Client
 
 from app.config import get_settings
 from app.providers.base import Provider, TextMessage, TextRequest, TextResponse
-from app.providers.gemini import GeminiProvider
-from app.providers.groq import GroqProvider
-from app.providers.huggingface import HuggingFaceProvider
 from app.router.health import ProviderHealthTracker
 
 
@@ -53,34 +34,40 @@ class ModelConfig:
     priority: int
 
 
-class ModelRouter:
-    def __init__(self) -> None:
-        settings = get_settings()
-        self._supabase: Client = create_client(settings.supabase.url, settings.supabase.anon_key)
-
-        providers: dict[str, Provider] = {
-            "gemini": GeminiProvider(),
-        }
+def _build_provider_registry(enabled: list[str]) -> dict[str, Provider]:
+    """Lazy-load only the providers listed in ENABLED_PROVIDERS."""
+    registry: dict[str, Provider] = {}
+    for name in enabled:
         try:
-            providers["groq"] = GroqProvider()
+            if name == "gemini":
+                from app.providers.gemini import GeminiProvider
+                registry["gemini"] = GeminiProvider()
+            elif name == "groq":
+                from app.providers.groq import GroqProvider
+                registry["groq"] = GroqProvider()
+            elif name == "huggingface":
+                from app.providers.huggingface import HuggingFaceProvider
+                registry["huggingface"] = HuggingFaceProvider()
         except Exception:
             ...
-        try:
-            providers["huggingface"] = HuggingFaceProvider()
-        except Exception:
-            ...
-        self._providers = providers
+    return registry
 
-        self._health = ProviderHealthTracker()
 
-    @property
-    def health(self) -> ProviderHealthTracker:
-        """Expose health tracker for the admin health endpoint."""
-        return self._health
+class _ModelsCache:
+    """TTL cache for models_config to avoid hitting Supabase on every request."""
 
-    # ── model loading ────────────────────────────────────────────────
+    def __init__(self, supabase: Client, ttl_sec: int, default_priority: int) -> None:
+        self._supabase = supabase
+        self._ttl = ttl_sec
+        self._default_priority = default_priority
+        self._cache: dict[str, tuple[float, list[ModelConfig]]] = {}
 
-    async def _load_models_for_task(self, task_type: TaskType) -> list[ModelConfig]:
+    def get(self, task_type: str) -> list[ModelConfig]:
+        now = time.monotonic()
+        cached = self._cache.get(task_type)
+        if cached and (now - cached[0]) < self._ttl:
+            return cached[1]
+
         resp = (
             self._supabase.table("models_config")
             .select("id,provider,model_key,task_type,temperature,max_output_tokens,priority,enabled")
@@ -89,7 +76,7 @@ class ModelRouter:
             .order("priority")
             .execute()
         )
-        return [
+        models = [
             ModelConfig(
                 id=row["id"],
                 provider=row["provider"],
@@ -97,40 +84,60 @@ class ModelRouter:
                 task_type=row["task_type"],
                 temperature=row.get("temperature"),
                 max_output_tokens=row.get("max_output_tokens"),
-                priority=row.get("priority") or 100,
+                priority=row.get("priority") or self._default_priority,
             )
             for row in (resp.data or [])
         ]
+        self._cache[task_type] = (now, models)
+        return models
+
+    def invalidate(self, task_type: str | None = None) -> None:
+        if task_type:
+            self._cache.pop(task_type, None)
+        else:
+            self._cache.clear()
+
+
+class ModelRouter:
+    def __init__(self) -> None:
+        settings = get_settings()
+        self._supabase: Client = create_client(settings.supabase.url, settings.supabase.anon_key)
+        self._providers = _build_provider_registry(settings.routing.enabled_providers)
+        self._health = ProviderHealthTracker(health_settings=settings.health)
+        self._models_cache = _ModelsCache(
+            supabase=self._supabase,
+            ttl_sec=settings.routing.models_config_cache_ttl_sec,
+            default_priority=settings.routing.default_priority,
+        )
+        self._err_max_len = settings.health.error_message_max_len
+
+    @property
+    def health(self) -> ProviderHealthTracker:
+        return self._health
+
+    def invalidate_cache(self, task_type: str | None = None) -> None:
+        """Call after admin changes models_config so new config takes effect."""
+        self._models_cache.invalidate(task_type)
 
     # ── smart ordering ───────────────────────────────────────────────
 
     def _rank_models(self, models: list[ModelConfig]) -> tuple[list[ModelConfig], list[ModelConfig]]:
-        """
-        Split models into (available, cooling_down) and sort each list
-        by effective priority.
-        """
         available: list[tuple[int, ModelConfig]] = []
         cooling: list[tuple[float, ModelConfig]] = []
 
         for m in models:
-            if self._providers.get(m.provider) is None:
+            if m.provider not in self._providers:
                 continue
-
             if self._health.is_available(m.provider, m.model_key):
                 penalty = self._health.get_health_penalty(m.provider, m.model_key)
-                effective = m.priority + penalty
-                available.append((effective, m))
+                available.append((m.priority + penalty, m))
             else:
                 remaining = self._health.get_cooldown_remaining(m.provider, m.model_key)
                 cooling.append((remaining, m))
 
         available.sort(key=lambda x: x[0])
-        cooling.sort(key=lambda x: x[0])  # shortest remaining cooldown first
-
-        return (
-            [m for _, m in available],
-            [m for _, m in cooling],
-        )
+        cooling.sort(key=lambda x: x[0])
+        return ([m for _, m in available], [m for _, m in cooling])
 
     # ── logging ──────────────────────────────────────────────────────
 
@@ -164,13 +171,11 @@ class ModelRouter:
         task_type: TaskType,
         messages: list[TextMessage],
     ) -> TextResponse:
-        models = await self._load_models_for_task(task_type)
+        models = self._models_cache.get(task_type)
         if not models:
             raise RuntimeError(f"No models configured for task_type={task_type}")
 
         available, cooling = self._rank_models(models)
-
-        # Try available (healthy) models first, then cooling-down as last resort
         ordered = available + cooling
         if not ordered:
             raise RuntimeError(f"No reachable providers for task_type={task_type}")
@@ -178,7 +183,7 @@ class ModelRouter:
         last_error: Exception | None = None
         for model in ordered:
             provider = self._providers[model.provider]
-            was_cooling = model in cooling
+            was_cooling = model not in available
             penalty = self._health.get_health_penalty(model.provider, model.model_key)
             started = time.monotonic()
 
@@ -191,32 +196,22 @@ class ModelRouter:
                 )
                 resp = await provider.generate_text(req)
                 elapsed_ms = int((time.monotonic() - started) * 1000)
-
                 self._health.record_success(model.provider, model.model_key)
                 self._log_usage(
                     model=model, success=True, latency_ms=elapsed_ms,
-                    metadata={
-                        "effective_priority": model.priority + penalty,
-                        "was_cooling_down": was_cooling,
-                    },
+                    metadata={"effective_priority": model.priority + penalty, "was_cooling_down": was_cooling},
                 )
                 return resp
-
             except Exception as exc:
                 elapsed_ms = int((time.monotonic() - started) * 1000)
-                err_msg = str(exc)[:500]
-
+                err_msg = str(exc)[: self._err_max_len]
                 self._health.record_error(model.provider, model.model_key, err_msg)
                 self._log_usage(
                     model=model, success=False, latency_ms=elapsed_ms,
                     error_message=err_msg,
-                    metadata={
-                        "effective_priority": model.priority + penalty,
-                        "was_cooling_down": was_cooling,
-                    },
+                    metadata={"effective_priority": model.priority + penalty, "was_cooling_down": was_cooling},
                 )
                 last_error = exc
-                continue
 
         raise RuntimeError(f"All providers failed for task_type={task_type}") from last_error
 
@@ -225,7 +220,7 @@ class ModelRouter:
         task_type: TaskType,
         messages: list[TextMessage],
     ) -> AsyncIterator[str]:
-        models = await self._load_models_for_task(task_type)
+        models = self._models_cache.get(task_type)
         if not models:
             raise RuntimeError(f"No models configured for task_type={task_type}")
 
@@ -237,7 +232,7 @@ class ModelRouter:
         last_error: Exception | None = None
         for model in ordered:
             provider = self._providers[model.provider]
-            was_cooling = model in cooling
+            was_cooling = model not in available
             penalty = self._health.get_health_penalty(model.provider, model.model_key)
             started = time.monotonic()
 
@@ -250,9 +245,7 @@ class ModelRouter:
                 )
                 stream_method = getattr(provider, "generate_text_stream", None)
                 if callable(stream_method):
-                    full_content: list[str] = []
                     async for chunk in stream_method(req):
-                        full_content.append(chunk)
                         yield chunk
                     elapsed_ms = int((time.monotonic() - started) * 1000)
                     self._health.record_success(model.provider, model.model_key)
@@ -272,10 +265,9 @@ class ModelRouter:
                 if resp.content:
                     yield resp.content
                 return
-
             except Exception as exc:
                 elapsed_ms = int((time.monotonic() - started) * 1000)
-                err_msg = str(exc)[:500]
+                err_msg = str(exc)[: self._err_max_len]
                 self._health.record_error(model.provider, model.model_key, err_msg)
                 self._log_usage(
                     model=model, success=False, latency_ms=elapsed_ms,
@@ -283,6 +275,5 @@ class ModelRouter:
                     metadata={"effective_priority": model.priority + penalty, "was_cooling_down": was_cooling},
                 )
                 last_error = exc
-                continue
 
         raise RuntimeError(f"All providers failed for task_type={task_type}") from last_error

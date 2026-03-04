@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { SHARE_CONTENT_LIMIT } from '@/lib/config';
 import { redirect } from 'next/navigation';
 import { ShareUI } from './ShareUI';
 
@@ -20,7 +21,7 @@ export default async function SharePage() {
     .select('id, type, public_url, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
-    .limit(30);
+    .limit(SHARE_CONTENT_LIMIT);
 
   return (
     <div className="space-y-6 animate-fade-in">

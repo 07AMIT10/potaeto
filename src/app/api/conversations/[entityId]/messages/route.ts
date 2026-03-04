@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
-
-const HISTORY_LIMIT = 50;
+import { CONVERSATION_HISTORY_LIMIT } from '@/lib/config';
 
 export async function GET(
   _request: Request,
@@ -32,7 +31,7 @@ export async function GET(
     .eq('user_id', user.id)
     .in('role', ['user', 'assistant'])
     .order('created_at', { ascending: true })
-    .limit(HISTORY_LIMIT);
+    .limit(CONVERSATION_HISTORY_LIMIT);
 
   if (messagesError) {
     console.error('messages history error:', messagesError);

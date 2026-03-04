@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getGeminiApiKey, getGeminiTtsModel } from '@/lib/gemini';
 import { NextResponse } from 'next/server';
+import { GEMINI_TTS_VOICE } from '@/lib/config';
 
 /** POST: { text: string } -> returns audio bytes (e.g. MP3 or raw). */
 export async function POST(request: Request) {
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
           generationConfig: {
             responseModalities: ['AUDIO'],
             speechConfig: {
-              voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } },
+              voiceConfig: { prebuiltVoiceConfig: { voiceName: GEMINI_TTS_VOICE } },
             },
           },
         }),

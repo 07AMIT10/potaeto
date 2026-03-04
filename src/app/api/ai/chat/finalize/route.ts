@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { maybeUpdateSummary } from '@/lib/chat-memory';
-
-const ORCHESTRATOR_URL = process.env.ORCHESTRATOR_URL || 'http://localhost:8000';
+import { ORCHESTRATOR_URL } from '@/lib/config';
 
 /**
  * Called by the client after a streaming chat response is complete.

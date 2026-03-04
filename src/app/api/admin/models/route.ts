@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase/server';
+import { ADMIN_USAGE_LOGS_LIMIT } from '@/lib/config';
 import { NextResponse } from 'next/server';
 
 function checkAdmin(request: Request): boolean {
@@ -71,7 +72,7 @@ export async function GET(request: Request) {
     .from('model_usage_logs')
     .select('task_type, provider, model_key, success, latency_ms')
     .order('created_at', { ascending: false })
-    .limit(5000);
+    .limit(ADMIN_USAGE_LOGS_LIMIT);
 
   type ProviderStats = { calls: number; errors: number; totalLatency: number; latencyCount: number };
   type TaskStats = { calls: number; errors: number };
