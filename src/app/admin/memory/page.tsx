@@ -1,19 +1,6 @@
-import { headers } from 'next/headers';
-import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export default async function AdminMemoryPage() {
-  const headersList = await headers();
-  const provided = headersList.get('x-admin-secret');
-  const expected = process.env.ADMIN_SECRET;
-  if (expected && provided !== expected) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-4">
-        <p className="text-gray-500">Unauthorized. Set X-Admin-Secret header to ADMIN_SECRET.</p>
-      </main>
-    );
-  }
-
   const supabase = createServiceClient();
 
   const [{ data: summaries }, { data: memories }, { data: usage }] = await Promise.all([
@@ -35,18 +22,15 @@ export default async function AdminMemoryPage() {
   ]);
 
   return (
-    <main className="min-h-screen max-w-6xl mx-auto px-4 py-8 space-y-8">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-potato-800 mb-1">Admin – Memory & routing logs</h1>
-          <p className="text-sm text-gray-500">
-            Inspect conversation summaries, long-term memories, and recent model routing events.
-          </p>
-        </div>
-        <Link href="/admin" className="text-sm text-potato-600 hover:underline">
-          ← Back to overview
-        </Link>
-      </header>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-xl font-bold text-potato-800 dark:text-potato-200 mb-1">
+          Memory & routing logs
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Conversation summaries, long-term memories, and recent model routing events.
+        </p>
+      </div>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-700">Conversation summaries (latest 50)</h2>
@@ -199,7 +183,7 @@ export default async function AdminMemoryPage() {
           </table>
         </div>
       </section>
-    </main>
+    </div>
   );
 }
 

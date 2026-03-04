@@ -1,19 +1,6 @@
-import { headers } from 'next/headers';
-import Link from 'next/link';
 import { createServiceClient } from '@/lib/supabase/server';
 
 export default async function AdminSkillsPage() {
-  const headersList = await headers();
-  const provided = headersList.get('x-admin-secret');
-  const expected = process.env.ADMIN_SECRET;
-  if (expected && provided !== expected) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-4">
-        <p className="text-gray-500">Unauthorized. Set X-Admin-Secret header to ADMIN_SECRET.</p>
-      </main>
-    );
-  }
-
   const supabase = createServiceClient();
 
   const { data: skills } = await supabase
@@ -38,18 +25,13 @@ export default async function AdminSkillsPage() {
   }
 
   return (
-    <main className="min-h-screen max-w-4xl mx-auto px-4 py-8 space-y-8">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-potato-800 mb-1">Admin – Skills</h1>
-          <p className="text-sm text-gray-500">
-            Inspect configured skills and how many entities have them enabled.
-          </p>
-        </div>
-        <Link href="/admin" className="text-sm text-potato-600 hover:underline">
-          ← Back to overview
-        </Link>
-      </header>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-xl font-bold text-potato-800 dark:text-potato-200 mb-1">Skills</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Skills catalog and how many entities have each enabled.
+        </p>
+      </div>
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-gray-700">Skills catalog</h2>
@@ -102,7 +84,7 @@ export default async function AdminSkillsPage() {
           Editing mappings is currently done via SQL / Supabase dashboard. A richer editor can be layered on later.
         </p>
       </section>
-    </main>
+    </div>
   );
 }
 

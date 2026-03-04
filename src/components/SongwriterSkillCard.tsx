@@ -4,9 +4,10 @@ import { useState } from 'react';
 
 type Props = {
   entityId: string;
+  onSuccess?: () => void;
 };
 
-export function SongwriterSkillCard({ entityId }: Props) {
+export function SongwriterSkillCard({ entityId, onSuccess }: Props) {
   const [prompt, setPrompt] = useState('');
   const [output, setOutput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,7 @@ export function SongwriterSkillCard({ entityId }: Props) {
       }
 
       setOutput((data as { content?: string }).content ?? '');
+      onSuccess?.();
     } catch (e) {
       setError(String(e));
     } finally {

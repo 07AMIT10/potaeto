@@ -70,6 +70,7 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
         setLoading(false);
         return;
       }
+      const conversationId = res.headers.get('X-Conversation-Id') ?? '';
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let full = '';
@@ -89,6 +90,14 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
           });
           scrollToBottom();
         }
+      }
+
+      if (conversationId && full.trim()) {
+        fetch('/api/ai/chat/finalize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityId, conversationId, content: full.trim() }),
+        }).catch(() => {});
       }
     } catch (e) {
       setMessages((m) => [...m, { role: 'model', parts: `Error: ${String(e)}` }]);
@@ -119,7 +128,12 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
         ))}
         {loading && messages[messages.length - 1]?.role === 'model' && !messages[messages.length - 1].parts && (
           <div className="mr-auto rounded-lg bg-gray-100 dark:bg-gray-700 px-3 py-2">
-            <span className="animate-pulse">Thinking...</span>
+            <span className="animate-pulse">Thinking…</span>
+          </div>
+        )}
+        {loading && messages[messages.length - 1]?.role === 'model' && messages[messages.length - 1].parts && (
+          <div className="mr-auto text-gray-400 text-xs px-1">
+            <span className="inline-block w-2 h-2 rounded-full bg-current animate-pulse" aria-hidden />
           </div>
         )}
         <div ref={bottomRef} />
