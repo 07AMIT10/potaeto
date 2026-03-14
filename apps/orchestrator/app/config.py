@@ -50,6 +50,7 @@ def _env_list(key: str, default: list[str] | None = None) -> list[str]:
 class SupabaseSettings:
     url: str
     anon_key: str
+    service_role_key: str = ""
 
 
 @dataclass
@@ -93,10 +94,12 @@ class AppSettings:
 @lru_cache(maxsize=1)
 def get_settings() -> AppSettings:
     supabase_url = _env_str("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
-    supabase_key = _env_str("SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY")
-
+    # Prefer service role key so orchestrator can read models_config (RLS is admin-only)
+    service_role_key = _env_str("SUPABASE_SERVICE_ROLE_KEY")
+    anon_key = _env_str("SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    supabase_key = service_role_key or anon_key
     if not supabase_url or not supabase_key:
-        raise RuntimeError("Supabase URL / anon key not configured for orchestrator")
+        raise RuntimeError("Supabase URL and key (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY) not configured for orchestrator")
 
     gemini_key = _env_str("GOOGLE_GEMINI_API_KEY", "GEMINI_API_KEY")
     if not gemini_key:
@@ -124,7 +127,7 @@ def get_settings() -> AppSettings:
     )
 
     return AppSettings(
-        supabase=SupabaseSettings(url=supabase_url, anon_key=supabase_key),
+        supabase=SupabaseSettings(url=supabase_url, anon_key=anon_key, service_role_key=service_role_key),
         gemini=GeminiSettings(api_key=gemini_key),
         health=health,
         routing=routing,

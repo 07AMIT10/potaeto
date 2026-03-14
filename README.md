@@ -69,6 +69,10 @@ See **[context.md](./context.md)** for architecture, routes, data model, and con
 
 See **[RESEARCH_AND_DESIGN.md](./RESEARCH_AND_DESIGN.md)** for the design document covering skills pipeline, streaming, proactive messaging, and UI principles.
 
+## Deployment
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for deploying the Next.js app and Python orchestrator on **Render** (including the `render.yaml` blueprint and required env vars).
+
 ## Project Structure
 
 ```

@@ -101,7 +101,8 @@ class _ModelsCache:
 class ModelRouter:
     def __init__(self) -> None:
         settings = get_settings()
-        self._supabase: Client = create_client(settings.supabase.url, settings.supabase.anon_key)
+        key = settings.supabase.service_role_key or settings.supabase.anon_key
+        self._supabase: Client = create_client(settings.supabase.url, key)
         self._providers = _build_provider_registry(settings.routing.enabled_providers)
         self._health = ProviderHealthTracker(health_settings=settings.health)
         self._models_cache = _ModelsCache(
