@@ -70,20 +70,25 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
     }
   }, [entity, seed]);
 
+  /** Parse JSON field: accept {} or valid JSON; if invalid, treat as a single description string. */
+  const parseJsonField = (raw: string): object => {
+    const s = (raw || '').trim();
+    if (!s) return {};
+    try {
+      const parsed = JSON.parse(s);
+      return typeof parsed === 'object' && parsed !== null ? parsed : { description: String(parsed) };
+    } catch {
+      return { description: s };
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    let charJson: object, appearJson: object, personaJson: object;
-    try {
-      charJson = JSON.parse(characteristics || '{}');
-      appearJson = JSON.parse(appearance || '{}');
-      personaJson = JSON.parse(persona || '{}');
-    } catch {
-      setError('Invalid JSON in characteristics, appearance, or persona');
-      setSaving(false);
-      return;
-    }
+    const charJson = parseJsonField(characteristics);
+    const appearJson = parseJsonField(appearance);
+    const personaJson = parseJsonField(persona);
     const skillsArr = skills
       .split(',')
       .map((s) => s.trim())

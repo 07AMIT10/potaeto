@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI
+import json
+
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -229,25 +231,44 @@ async def parse_entity(req: ParseEntityRequest) -> Any:
         content=f'User description:\n"""\n{req.text}\n"""',
     )
 
-    result = await router.generate_text(
-        task_type="chat_primary",
-        messages=[system_message, user_message],
-    )
+    try:
+        result = await router.generate_text(
+            task_type="chat_primary",
+            messages=[system_message, user_message],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Model error: {e!s}") from e
 
     raw = result.content.strip()
     cleaned = raw.replace("```json", "").replace("```", "").strip()
 
-    import json
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Model did not return valid JSON: {e!s}. Raw: {raw[:200]}",
+        ) from e
 
-    data = json.loads(cleaned)
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=422, detail="Model did not return a JSON object")
+
+    name = data.get("name")
+    slug = data.get("slug")
+    if not name or not isinstance(name, str):
+        name = "Character"
+    if not slug or not isinstance(slug, str):
+        slug = (name or "character").lower().replace(" ", "-").replace("_", "-")
+        slug = "".join(c for c in slug if c.isalnum() or c == "-") or "character"
+
     return ParsedEntity(
-        name=data["name"],
-        slug=data["slug"],
-        characteristics=data.get("characteristics") or {},
-        appearance=data.get("appearance") or {},
-        persona=data.get("persona") or {},
-        skills=data.get("skills") or [],
-        attributes=data.get("attributes") or {},
+        name=name,
+        slug=slug,
+        characteristics=data.get("characteristics") if isinstance(data.get("characteristics"), dict) else {},
+        appearance=data.get("appearance") if isinstance(data.get("appearance"), dict) else {},
+        persona=data.get("persona") if isinstance(data.get("persona"), dict) else {},
+        skills=data.get("skills") if isinstance(data.get("skills"), list) else [],
+        attributes=data.get("attributes") if isinstance(data.get("attributes"), dict) else {},
     )
 
 

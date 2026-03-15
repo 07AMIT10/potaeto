@@ -25,7 +25,14 @@ export async function POST(request: Request) {
     if (!res.ok) {
       const msg = await res.text().catch(() => '');
       console.error('orchestrator parse-entity error:', res.status, msg);
-      return NextResponse.json({ error: 'Failed to parse entity' }, { status: 502 });
+      let errMsg = 'Failed to parse entity';
+      try {
+        const errBody = JSON.parse(msg) as { detail?: string };
+        if (typeof errBody.detail === 'string') errMsg = errBody.detail;
+      } catch {
+        // use default
+      }
+      return NextResponse.json({ error: errMsg }, { status: res.status === 422 ? 422 : 502 });
     }
 
     const entity = (await res.json()) as {

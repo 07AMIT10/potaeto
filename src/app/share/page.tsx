@@ -1,25 +1,22 @@
-import { createClient } from '@/lib/supabase/server';
 import { SHARE_CONTENT_LIMIT } from '@/lib/config';
 import { redirect } from 'next/navigation';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 import { ShareUI } from './ShareUI';
 
 export default async function SharePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) redirect('/login');
 
   const { data: entities } = await supabase
     .from('entities')
     .select('id, name, slug, is_public')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   const { data: content } = await supabase
     .from('content')
     .select('id, type, public_url, created_at')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(SHARE_CONTENT_LIMIT);
 
