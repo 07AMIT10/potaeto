@@ -31,11 +31,11 @@ export default function HomePage() {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <Link href="/login" className="btn-primary text-base px-8 py-3">
-              Get started
+            <Link href="/onboarding" className="btn-primary text-base px-8 py-3">
+              Continue as guest
             </Link>
             <Link href="/login" className="btn-secondary text-base px-8 py-3">
-              Learn more
+              Log in / sign up
             </Link>
           </div>
 
