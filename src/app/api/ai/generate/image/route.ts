@@ -1,13 +1,10 @@
-import { createClient } from '@/lib/supabase/server';
 import { createGeminiClient, getGeminiApiKey, getGeminiImageModel } from '@/lib/gemini';
 import { NextResponse } from 'next/server';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { entityId, prompt } = body as { entityId?: string; prompt: string };
@@ -24,7 +21,7 @@ export async function POST(request: Request) {
       .from('entities')
       .select('name, appearance')
       .eq('id', entityId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
     if (entity) {
       const appearance = (entity.appearance as { description?: string })?.description ?? '';
@@ -57,7 +54,7 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(base64, 'base64');
     const ext = mimeType.includes('png') ? 'png' : 'jpg';
-    const path = `${user.id}/${Date.now()}.${ext}`;
+    const path = `${userId}/${Date.now()}.${ext}`;
     const { data: upload, error: uploadError } = await supabase.storage
       .from('content')
       .upload(path, buffer, { contentType: mimeType, upsert: false });
@@ -72,7 +69,7 @@ export async function POST(request: Request) {
     const { data: contentRow, error: insertError } = await supabase
       .from('content')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         entity_id: entityId ?? null,
         type: 'image',
         storage_path: upload.path,

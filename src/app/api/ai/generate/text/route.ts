@@ -1,13 +1,10 @@
-import { createClient } from '@/lib/supabase/server';
 import { createGeminiClient, getGeminiApiKey, getGeminiModel } from '@/lib/gemini';
 import { NextResponse } from 'next/server';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { entityId, prompt, save } = body as { entityId?: string; prompt: string; save?: boolean };
@@ -24,7 +21,7 @@ export async function POST(request: Request) {
       .from('entities')
       .select('name, characteristics, persona, skills')
       .eq('id', entityId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
     if (entity) {
       systemInstruction = `You are writing as or for the character "${entity.name}". Stay in character. Characteristics: ${JSON.stringify(entity.characteristics)}. Persona: ${JSON.stringify(entity.persona)}. Skills: ${JSON.stringify(entity.skills)}.`;
@@ -43,7 +40,7 @@ export async function POST(request: Request) {
 
     if (save && entityId) {
       await supabase.from('content').insert({
-        user_id: user.id,
+        user_id: userId,
         entity_id: entityId,
         type: 'text',
         storage_path: null,

@@ -1,18 +1,15 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { maybeUpdateSummary } from '@/lib/chat-memory';
 import { ORCHESTRATOR_URL } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 /**
  * Called by the client after a streaming chat response is complete.
  * Persists the assistant message and optionally runs summary/memory update.
  */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { entityId, conversationId, content } = body as {
@@ -32,7 +29,7 @@ export async function POST(request: Request) {
     .from('conversations')
     .select('id, user_id, entity_id')
     .eq('id', conversationId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('entity_id', entityId)
     .single();
 
@@ -47,7 +44,7 @@ export async function POST(request: Request) {
 
   const { error: insertError } = await supabase.from('messages').insert({
     conversation_id: conversationId,
-    user_id: user.id,
+    user_id: userId,
     role: 'assistant',
     content: trimmed,
   });
@@ -60,7 +57,7 @@ export async function POST(request: Request) {
   await maybeUpdateSummary({
     supabase,
     conversationId,
-    userId: user.id,
+    userId: userId,
     entityId,
     orchestratorUrl: ORCHESTRATOR_URL,
   });

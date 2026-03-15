@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { SKILL_OUTPUTS_DEFAULT_LIMIT, SKILL_OUTPUTS_MAX_LIMIT } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 /**
  * GET /api/entities/[entityId]/skill-outputs
@@ -11,12 +11,9 @@ export async function GET(
   context: { params: Promise<{ entityId: string }> }
 ) {
   const { entityId } = await context.params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId, supabase } = await resolveUserId();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -27,7 +24,7 @@ export async function GET(
     .from('entities')
     .select('id')
     .eq('id', entityId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (!entity) {
@@ -37,7 +34,7 @@ export async function GET(
   const { data: outputs, error } = await supabase
     .from('skill_outputs')
     .select('id, skill_id, content_type, text_content, public_url, metadata, created_at')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('entity_id', entityId)
     .order('created_at', { ascending: false })
     .limit(limit);

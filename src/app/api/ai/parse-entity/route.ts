@@ -1,15 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { ORCHESTRATOR_URL } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+
 
   const body = await request.json();
   const { text } = body as { text: string };
@@ -44,16 +42,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid entity structure from orchestrator' }, { status: 500 });
     }
 
-    const { data: profile } = await supabase.from('profiles').select('id').eq('id', user.id).single();
-    if (!profile) {
-      return NextResponse.json({ error: 'Profile not found' }, { status: 500 });
-    }
 
     const slug = entity.slug.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     const { data: inserted, error } = await supabase
       .from('entities')
       .insert({
-        user_id: user.id,
+        user_id: userId,
         name: entity.name,
         slug: slug || 'entity',
         characteristics: entity.characteristics ?? {},

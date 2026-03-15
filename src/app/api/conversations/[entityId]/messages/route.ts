@@ -1,21 +1,18 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { CONVERSATION_HISTORY_LIMIT } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ entityId: string }> }
 ) {
   const { entityId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
-    .upsert({ user_id: user.id, entity_id: entityId }, { onConflict: 'user_id,entity_id' })
+    .upsert({ user_id: userId, entity_id: entityId }, { onConflict: 'user_id,entity_id' })
     .select('id')
     .single();
 
@@ -28,7 +25,7 @@ export async function GET(
     .from('messages')
     .select('id, role, content, meta, created_at')
     .eq('conversation_id', conversation.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .in('role', ['user', 'assistant'])
     .order('created_at', { ascending: true })
     .limit(CONVERSATION_HISTORY_LIMIT);

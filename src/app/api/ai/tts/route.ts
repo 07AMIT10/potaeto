@@ -1,15 +1,12 @@
-import { createClient } from '@/lib/supabase/server';
 import { getGeminiApiKey, getGeminiTtsModel } from '@/lib/gemini';
 import { NextResponse } from 'next/server';
 import { GEMINI_TTS_VOICE } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 /** POST: { text: string } -> returns audio bytes (e.g. MP3 or raw). */
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { text } = body as { text: string };

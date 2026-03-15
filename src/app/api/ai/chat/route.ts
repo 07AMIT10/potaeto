@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 import { ORCHESTRATOR_URL, CHAT_RECENT_MESSAGES_LIMIT, CHAT_MEMORIES_LIMIT } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 function buildSystemPrompt(entity: {
   name: string;
@@ -20,11 +20,8 @@ function buildSystemPrompt(entity: {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { entityId, message } = body as {
@@ -40,7 +37,7 @@ export async function POST(request: Request) {
     .from('entities')
     .select('*')
     .eq('id', entityId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (entityError || !entity) {
@@ -51,7 +48,7 @@ export async function POST(request: Request) {
   const { data: conversation, error: conversationError } = await supabase
     .from('conversations')
     .upsert(
-      { user_id: user.id, entity_id: entityId },
+      { user_id: userId, entity_id: entityId },
       { onConflict: 'user_id,entity_id' }
     )
     .select('id')
@@ -65,7 +62,7 @@ export async function POST(request: Request) {
   // Store the user message for future memory use
   const { error: insertUserMsgError } = await supabase.from('messages').insert({
     conversation_id: conversation.id,
-    user_id: user.id,
+    user_id: userId,
     role: 'user',
     content: message,
   });
@@ -80,7 +77,7 @@ export async function POST(request: Request) {
     .from('conversation_summaries')
     .select('summary')
     .eq('conversation_id', conversation.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
   if (summaryError && summaryError.code !== 'PGRST116') {
     console.error('summary fetch error:', summaryError);
@@ -89,7 +86,7 @@ export async function POST(request: Request) {
   const { data: memoriesRows, error: memoriesError } = await supabase
     .from('memories')
     .select('kind, content')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .eq('entity_id', entityId)
     .in('kind', ['fact', 'preference'])
     .order('created_at', { ascending: false })
@@ -102,7 +99,7 @@ export async function POST(request: Request) {
     .from('messages')
     .select('role, content, created_at')
     .eq('conversation_id', conversation.id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .in('role', ['user', 'assistant'])
     .order('created_at', { ascending: false })
     .limit(CHAT_RECENT_MESSAGES_LIMIT);

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
-import { createClient } from '@/lib/supabase/server';
 import { ORCHESTRATOR_URL } from '@/lib/config';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 type SongwriterInvokeBody = {
   entityId: string;
@@ -9,12 +9,9 @@ type SongwriterInvokeBody = {
 };
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId, supabase } = await resolveUserId();
 
-  if (!user) {
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -30,7 +27,7 @@ export async function POST(request: Request) {
     .from('entities')
     .select('id, user_id, name, persona')
     .eq('id', entityId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (entityError || !entity) {
@@ -62,7 +59,7 @@ export async function POST(request: Request) {
     }
 
     const { error: insertError } = await supabase.from('skill_outputs').insert({
-      user_id: user.id,
+      user_id: userId,
       entity_id: entityId,
       skill_id: 'songwriter',
       content_type: 'text',

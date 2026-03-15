@@ -1,16 +1,13 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ entityId: string }> }
 ) {
   const { entityId: id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { name, slug, characteristics, appearance, persona, skills, is_public } = body;
@@ -27,7 +24,7 @@ export async function PATCH(
     .from('entities')
     .update(updates)
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .select('id, name, slug')
     .single();
 
@@ -40,17 +37,14 @@ export async function GET(
   { params }: { params: Promise<{ entityId: string }> }
 ) {
   const { entityId: id } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data, error } = await supabase
     .from('entities')
     .select('*')
     .eq('id', id)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (error || !data) return NextResponse.json({ error: 'Not found' }, { status: 404 });

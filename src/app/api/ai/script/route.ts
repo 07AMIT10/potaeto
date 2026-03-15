@@ -1,6 +1,6 @@
-import { createClient } from '@/lib/supabase/server';
 import { createGeminiClient, getGeminiApiKey, getGeminiModel } from '@/lib/gemini';
 import { NextResponse } from 'next/server';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 function buildEntityContext(entity: {
   name: string;
@@ -17,11 +17,8 @@ function buildEntityContext(entity: {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { entityId, topic } = body as { entityId: string; topic?: string };
@@ -32,7 +29,7 @@ export async function POST(request: Request) {
     .from('entities')
     .select('*')
     .eq('id', entityId)
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .single();
 
   if (entityError || !entity) {

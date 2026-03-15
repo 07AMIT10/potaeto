@@ -1,12 +1,9 @@
-import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
   const { name, slug, characteristics, appearance, persona, skills } = body;
@@ -15,7 +12,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from('entities')
     .insert({
-      user_id: user.id,
+      user_id: userId,
       name: name || 'Unnamed',
       slug: safeSlug,
       characteristics: characteristics ?? {},
