@@ -80,15 +80,17 @@ export async function getCurrentAppUser(): Promise<AppUser | null> {
 
   if (error || !data || !data.user) return null;
 
-  const expiresAt = new Date(data.expires_at);
+  const userRow = (data as unknown as { user: { id: string; email: string }; expires_at: string }).user;
+
+  const expiresAt = new Date((data as { expires_at: string }).expires_at);
   if (expiresAt.getTime() < Date.now()) {
     await clearSession();
     return null;
   }
 
   return {
-    id: data.user.id,
-    email: data.user.email,
+    id: userRow.id,
+    email: userRow.email,
   };
 }
 
