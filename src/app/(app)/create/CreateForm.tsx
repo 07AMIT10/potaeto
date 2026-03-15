@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { Entity } from '@/types/database';
+import { useAuthMode } from '@/lib/auth/useAuthMode';
+import { addGuestEntity } from '@/lib/guestStorage';
 
 interface CreateFormProps {
   entity: Entity | null;
@@ -28,6 +30,8 @@ export function CreateForm({ entity, entitiesList }: CreateFormProps) {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const auth = useAuthMode();
 
   useEffect(() => {
     if (entity) {
@@ -59,25 +63,38 @@ export function CreateForm({ entity, entitiesList }: CreateFormProps) {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const res = await fetch(entity ? `/api/entities/${entity.id}` : '/api/entities', {
-      method: entity ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: name || 'Unnamed',
-        slug: slug || 'entity',
-        characteristics: charJson,
-        appearance: appearJson,
-        persona: personaJson,
-        skills: skillsArr,
-      }),
-    });
-    const data = await res.json();
-    setSaving(false);
-    if (!res.ok) {
-      setError(data.error ?? 'Failed to save');
+    // Logged-in path: save via API
+    if (auth.mode === 'app' || auth.mode === 'supabase') {
+      const res = await fetch(entity ? `/api/entities/${entity.id}` : '/api/entities', {
+        method: entity ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name || 'Unnamed',
+          slug: slug || 'entity',
+          characteristics: charJson,
+          appearance: appearJson,
+          persona: personaJson,
+          skills: skillsArr,
+        }),
+      });
+      const data = await res.json();
+      setSaving(false);
+      if (!res.ok) {
+        setError(data.error ?? 'Failed to save');
+        return;
+      }
+      router.push(`/chat/${data.id ?? entity!.id}`);
       return;
     }
-    router.push(`/chat/${data.id ?? entity!.id}`);
+
+    // Guest path: store locally
+    const saved = addGuestEntity({
+      id: entity?.id,
+      name: name || 'Unnamed',
+      slug: slug || 'entity',
+    });
+    setSaving(false);
+    router.push(`/chat/${saved.id}`);
   };
 
   return (

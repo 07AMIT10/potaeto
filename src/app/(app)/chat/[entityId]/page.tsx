@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ChatUI } from './ChatUI';
 import { SkillsSection } from '@/components/SkillsSection';
@@ -14,14 +14,15 @@ export default async function ChatPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
 
-  const { data: entity } = await supabase
+  const query = supabase
     .from('entities')
     .select('*')
     .eq('id', entityId)
-    .eq('user_id', user.id)
+    .limit(1)
     .single();
+
+  const { data: entity } = await query;
 
   if (!entity) notFound();
 

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AvatarScriptUI } from './AvatarScriptUI';
 
@@ -13,13 +13,11 @@ export default async function AvatarPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
 
   const { data: entity } = await supabase
     .from('entities')
     .select('*')
     .eq('id', entityId)
-    .eq('user_id', user.id)
     .single();
 
   if (!entity) notFound();

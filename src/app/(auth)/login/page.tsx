@@ -2,12 +2,78 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { loadGuestEntities, loadGuestContent } from '@/lib/guestStorage';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+
+  const router = useRouter();
+
+  const handleEmailPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setMessage(null);
+
+    try {
+      if (mode === 'login') {
+        const res = await fetch('/api/app-auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setMessage({ type: 'error', text: data.error ?? 'Failed to sign in.' });
+          return;
+        }
+
+        // After login, migrate any guest data.
+        const guestEntities = loadGuestEntities();
+        const guestContent = loadGuestContent();
+        if (guestEntities.length || guestContent.length) {
+          fetch('/api/app-auth/migrate-guest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entities: guestEntities, content: guestContent }),
+          }).catch(() => {});
+        }
+
+        router.push('/onboarding');
+        return;
+      }
+
+      const res = await fetch('/api/app-auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error ?? 'Failed to create account.' });
+        return;
+      }
+
+      const guestEntities = loadGuestEntities();
+      const guestContent = loadGuestContent();
+      if (guestEntities.length || guestContent.length) {
+        fetch('/api/app-auth/migrate-guest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entities: guestEntities, content: guestContent }),
+        }).catch(() => {});
+      }
+
+      router.push('/onboarding');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +113,7 @@ export default function LoginPage() {
         </div>
 
         <div className="card p-6 space-y-5">
-          <form onSubmit={handleMagicLink} className="space-y-4">
+          <form onSubmit={handleEmailPassword} className="space-y-4">
             <div>
               <label htmlFor="email" className="label">Email</label>
               <input
@@ -60,6 +126,18 @@ export default function LoginPage() {
                 className="input-field"
               />
             </div>
+            <div>
+              <label htmlFor="password" className="label">Password</label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="input-field"
+              />
+            </div>
             <button type="submit" disabled={loading} className="btn-primary w-full">
               {loading ? (
                 <span className="inline-flex items-center gap-2">
@@ -67,11 +145,21 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  Sending...
+                  {mode === 'login' ? 'Signing in...' : 'Creating account...'}
                 </span>
               ) : (
-                'Send magic link'
+                mode === 'login' ? 'Sign in' : 'Create account'
               )}
+            </button>
+            <button
+              type="button"
+              className="w-full text-xs text-[var(--muted)] hover:text-potato-600 transition-colors"
+              onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
+              disabled={loading}
+            >
+              {mode === 'login'
+                ? "Don't have an account? Create one"
+                : 'Already have an account? Sign in'}
             </button>
           </form>
 
@@ -83,6 +171,16 @@ export default function LoginPage() {
               <span className="bg-[var(--card)] px-3 text-[var(--muted)]">or</span>
             </div>
           </div>
+
+          <form onSubmit={handleMagicLink} className="space-y-3">
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-secondary w-full"
+            >
+              {loading ? 'Sending magic link...' : 'Continue with magic link'}
+            </button>
+          </form>
 
           <button
             type="button"

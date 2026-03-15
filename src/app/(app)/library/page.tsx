@@ -1,14 +1,26 @@
 import { createClient } from '@/lib/supabase/server';
 import { LIBRARY_CONTENT_LIMIT } from '@/lib/config';
-import { redirect } from 'next/navigation';
 import { LibraryContent } from './LibraryContent';
+import { GuestLibrary } from './GuestLibrary';
 
 export default async function LibraryPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
+  if (!user) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div>
+          <h1 className="page-title">Library</h1>
+          <p className="text-[var(--muted)] text-sm mt-1">
+            You&apos;re exploring as a guest. This view shows content stored in your browser only.
+          </p>
+        </div>
+        <GuestLibrary />
+      </div>
+    );
+  }
 
   const { data: entities } = await supabase
     .from('entities')

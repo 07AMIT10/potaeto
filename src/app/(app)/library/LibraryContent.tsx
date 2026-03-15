@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useAuthMode } from '@/lib/auth/useAuthMode';
+import { addGuestContent, listAllGuestContent, type GuestContent } from '@/lib/guestStorage';
 
 interface EntityRow {
   id: string;
@@ -32,22 +34,57 @@ export function LibraryContent({ entities, content }: LibraryContentProps) {
   const [textLoading, setTextLoading] = useState(false);
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [generatedText, setGeneratedText] = useState<string | null>(null);
+  const [localContent, setLocalContent] = useState<ContentRow[]>(content);
+
+  const auth = useAuthMode();
+
+  const refreshGuestContent = () => {
+    const all = listAllGuestContent();
+    const mapped: ContentRow[] = all.map((c: GuestContent) => ({
+      id: c.id,
+      type: c.type,
+      public_url: c.public_url,
+      metadata: c.metadata,
+      created_at: c.created_at,
+      entity_id: c.entity_id,
+    }));
+    setLocalContent(mapped);
+  };
 
   const generateImage = async () => {
     if (!imagePrompt.trim()) return;
     setImageLoading(true);
     setGeneratedImageUrl(null);
     try {
-      const res = await fetch('/api/ai/generate/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entityId: selectedEntity || undefined,
-          prompt: imagePrompt,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.public_url) setGeneratedImageUrl(data.public_url);
+      if (auth.mode === 'app' || auth.mode === 'supabase') {
+        const res = await fetch('/api/ai/generate/image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entityId: selectedEntity || undefined,
+            prompt: imagePrompt,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.public_url) setGeneratedImageUrl(data.public_url);
+      } else {
+        const res = await fetch('/api/guest/ai/generate/image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: imagePrompt }),
+        });
+        const data = await res.json();
+        if (res.ok && data.dataUrl) {
+          setGeneratedImageUrl(data.dataUrl);
+          addGuestContent({
+            type: 'image',
+            public_url: data.dataUrl,
+            metadata: { prompt: imagePrompt },
+            entity_id: selectedEntity || null,
+          });
+          refreshGuestContent();
+        }
+      }
     } finally {
       setImageLoading(false);
     }
@@ -58,17 +95,36 @@ export function LibraryContent({ entities, content }: LibraryContentProps) {
     setTextLoading(true);
     setGeneratedText(null);
     try {
-      const res = await fetch('/api/ai/generate/text', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          entityId: selectedEntity || undefined,
-          prompt: textPrompt,
-          save: true,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.text) setGeneratedText(data.text);
+      if (auth.mode === 'app' || auth.mode === 'supabase') {
+        const res = await fetch('/api/ai/generate/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entityId: selectedEntity || undefined,
+            prompt: textPrompt,
+            save: true,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.text) setGeneratedText(data.text);
+      } else {
+        const res = await fetch('/api/guest/ai/generate/text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: textPrompt }),
+        });
+        const data = await res.json();
+        if (res.ok && data.text) {
+          setGeneratedText(data.text);
+          addGuestContent({
+            type: 'text',
+            public_url: null,
+            metadata: { prompt: textPrompt, text: data.text },
+            entity_id: selectedEntity || null,
+          });
+          refreshGuestContent();
+        }
+      }
     } finally {
       setTextLoading(false);
     }
@@ -161,13 +217,13 @@ export function LibraryContent({ entities, content }: LibraryContentProps) {
 
       <section className="space-y-3">
         <h2 className="section-title text-base">Recent content</h2>
-        {content.length === 0 ? (
+        {localContent.length === 0 ? (
           <div className="card p-8 text-center">
             <p className="text-[var(--muted)] text-sm">No content yet. Generate an image or text above.</p>
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
-            {content.map((c) => (
+            {localContent.map((c) => (
               <div key={c.id} className="card p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-[var(--muted)] uppercase tracking-wide">{c.type}</span>
