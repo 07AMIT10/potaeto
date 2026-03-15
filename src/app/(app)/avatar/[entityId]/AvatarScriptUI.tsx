@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react';
 import Image from 'next/image';
+import { useAuthMode } from '@/lib/auth/useAuthMode';
 
 interface AvatarScriptUIProps {
   entityId: string;
@@ -16,16 +17,28 @@ export function AvatarScriptUI({ entityId, entityName, avatarUrl }: AvatarScript
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const auth = useAuthMode();
+
   const generateScript = async () => {
     setLoadingScript(true);
     try {
-      const res = await fetch('/api/ai/script', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entityId, topic: topic || undefined }),
-      });
-      const data = await res.json();
-      if (res.ok && data.script) setScript(data.script);
+      if (auth.mode === 'guest') {
+        const res = await fetch('/api/guest/ai/script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityName, topic: topic || undefined }),
+        });
+        const data = await res.json();
+        if (res.ok && data.script) setScript(data.script);
+      } else {
+        const res = await fetch('/api/ai/script', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityId, topic: topic || undefined }),
+        });
+        const data = await res.json();
+        if (res.ok && data.script) setScript(data.script);
+      }
     } finally {
       setLoadingScript(false);
     }
@@ -35,7 +48,8 @@ export function AvatarScriptUI({ entityId, entityName, avatarUrl }: AvatarScript
     if (!script.trim()) return;
     setPlaying(true);
     try {
-      const res = await fetch('/api/ai/tts', {
+      const endpoint = auth.mode === 'guest' ? '/api/guest/ai/tts' : '/api/ai/tts';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: script }),

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuthMode } from '@/lib/auth/useAuthMode';
 
 const VoiceInput = dynamic(
   () => import('@/components/VoiceInput').then((m) => ({ default: m.VoiceInput })),
@@ -16,6 +17,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+  const auth = useAuthMode();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,18 +25,34 @@ export default function OnboardingPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/ai/parse-entity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? 'Something went wrong');
-        setLoading(false);
-        return;
+      if (auth.mode === 'app' || auth.mode === 'supabase') {
+        const res = await fetch('/api/ai/parse-entity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? 'Something went wrong');
+          setLoading(false);
+          return;
+        }
+        router.push(`/create?entity=${data.id}`);
+      } else {
+        const res = await fetch('/api/guest/ai/parse-entity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          setError(data.error ?? 'Something went wrong');
+          setLoading(false);
+          return;
+        }
+        const seed = encodeURIComponent(JSON.stringify(data));
+        router.push(`/create?seed=${seed}`);
       }
-      router.push(`/create?entity=${data.id}`);
     } catch {
       setError('Network error');
       setLoading(false);

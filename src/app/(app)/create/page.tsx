@@ -4,14 +4,14 @@ import { CreateForm } from './CreateForm';
 export default async function CreatePage({
   searchParams,
 }: {
-  searchParams: Promise<{ entity?: string }>;
+  searchParams: Promise<{ entity?: string; seed?: string }>;
 }) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { entity: entityId } = await searchParams;
+  const { entity: entityId, seed } = await searchParams;
   let entity = null;
   if (entityId && user) {
     const { data } = await supabase
@@ -31,6 +31,8 @@ export default async function CreatePage({
         .order('created_at', { ascending: false })
     : { data: [] };
 
+  const seedEntity = seed ? decodeURIComponent(seed) : null;
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
       <div>
@@ -41,7 +43,7 @@ export default async function CreatePage({
           {entity ? 'Fine-tune your character details.' : 'Set up your character\'s profile and traits.'}
         </p>
       </div>
-      <CreateForm entity={entity} entitiesList={entities.data ?? []} />
+      <CreateForm entity={entity} entitiesList={entities.data ?? []} seed={seedEntity} />
     </div>
   );
 }

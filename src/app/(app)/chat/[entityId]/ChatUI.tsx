@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState, useRef, useCallback } from 'react';
+import { useAuthMode } from '@/lib/auth/useAuthMode';
+import { loadGuestChat, saveGuestChat, type GuestChatMessage } from '@/lib/guestStorage';
 
 interface Message {
   role: 'user' | 'model';
@@ -22,6 +24,8 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const auth = useAuthMode();
+
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -30,22 +34,36 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/conversations/${entityId}/messages`);
-        const data = await res.json();
-        if (!res.ok || cancelled) return;
-        const loaded: Message[] = (data.messages ?? []).map((m: { role: string; content: string; meta?: { proactive?: boolean } }) => ({
-          role: m.role === 'assistant' ? 'model' : 'user',
-          parts: m.content,
-          proactive: m.meta?.proactive ?? false,
-        }));
-        setMessages(loaded);
+        if (auth.mode === 'guest') {
+          const loadedGuest: GuestChatMessage[] = loadGuestChat(entityId);
+          if (cancelled) return;
+          const mapped: Message[] = loadedGuest.map((m) => ({
+            role: m.role,
+            parts: m.parts,
+          }));
+          setMessages(mapped);
+        } else {
+          const res = await fetch(`/api/conversations/${entityId}/messages`);
+          const data = await res.json();
+          if (!res.ok || cancelled) return;
+          const loaded: Message[] = (data.messages ?? []).map(
+            (m: { role: string; content: string; meta?: { proactive?: boolean } }) => ({
+              role: m.role === 'assistant' ? 'model' : 'user',
+              parts: m.content,
+              proactive: m.meta?.proactive ?? false,
+            })
+          );
+          setMessages(loaded);
+        }
       } finally {
         if (!cancelled) setInitialLoading(false);
         setTimeout(scrollToBottom, 50);
       }
     })();
-    return () => { cancelled = true; };
-  }, [entityId, scrollToBottom]);
+    return () => {
+      cancelled = true;
+    };
+  }, [auth.mode, entityId, scrollToBottom]);
 
   const send = async () => {
     const text = input.trim();
@@ -58,6 +76,66 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
     scrollToBottom();
 
     try {
+      if (auth.mode === 'guest') {
+        const historyPayload = messages.map<GuestChatMessage>((m) => ({
+          role: m.role === 'model' ? 'assistant' : 'user',
+          parts: m.parts,
+        }));
+        const res = await fetch('/api/guest/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entityName,
+            message: text,
+            history: historyPayload.map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts })),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          setMessages((m) => [
+            ...m,
+            { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` },
+          ]);
+          setLoading(false);
+          return;
+        }
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let full = '';
+        setMessages((m) => [...m, { role: 'model', parts: '' }]);
+        setStreaming(true);
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            full += chunk;
+            setMessages((m) => {
+              const next = [...m];
+              const last = next[next.length - 1];
+              if (last.role === 'model') next[next.length - 1] = { ...last, parts: full };
+              return next;
+            });
+            scrollToBottom();
+          }
+        }
+        setStreaming(false);
+        setLoading(false);
+        const finalMessages: Message[] = [];
+        setMessages((m) => {
+          finalMessages.push(...m);
+          return m;
+        });
+        const toStore: GuestChatMessage[] = finalMessages.map((m) => ({
+          role: m.role,
+          parts: m.parts,
+        }));
+        saveGuestChat(entityId, toStore);
+        inputRef.current?.focus();
+        return;
+      }
+
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,7 +143,10 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        setMessages((m) => [...m, { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` }]);
+        setMessages((m) => [
+          ...m,
+          { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` },
+        ]);
         setLoading(false);
         return;
       }

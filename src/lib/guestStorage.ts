@@ -17,6 +17,7 @@ export type GuestContent = {
 
 const ENTITIES_KEY = 'potaeto_guest_entities_v1';
 const CONTENT_KEY = 'potaeto_guest_content_v1';
+const CHAT_KEY_PREFIX = 'potaeto_guest_chat_';
 
 function safeParse<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
@@ -107,4 +108,19 @@ export function listAllGuestContent(): GuestContent[] {
   return loadGuestContent();
 }
 
+export type GuestChatMessage = {
+  role: 'user' | 'model';
+  parts: string;
+};
+
+export function loadGuestChat(entityId: string): GuestChatMessage[] {
+  if (typeof window === 'undefined') return [];
+  const raw = window.localStorage.getItem(`${CHAT_KEY_PREFIX}${entityId}`);
+  return safeParse<GuestChatMessage[]>(raw, []);
+}
+
+export function saveGuestChat(entityId: string, messages: GuestChatMessage[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(`${CHAT_KEY_PREFIX}${entityId}`, JSON.stringify(messages));
+}
 

@@ -10,9 +10,10 @@ import { addGuestEntity } from '@/lib/guestStorage';
 interface CreateFormProps {
   entity: Entity | null;
   entitiesList: { id: string; name: string; slug: string }[];
+  seed?: string | null;
 }
 
-export function CreateForm({ entity, entitiesList }: CreateFormProps) {
+export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
   const router = useRouter();
   const [name, setName] = useState(entity?.name ?? '');
   const [slug, setSlug] = useState(entity?.slug ?? '');
@@ -43,6 +44,31 @@ export function CreateForm({ entity, entitiesList }: CreateFormProps) {
       setSkills(Array.isArray(entity.skills) ? (entity.skills as string[]).join(', ') : '');
     }
   }, [entity]);
+
+  useEffect(() => {
+    if (!entity && seed) {
+      try {
+        const parsed = JSON.parse(seed) as {
+          name?: string;
+          slug?: string;
+          characteristics?: object;
+          appearance?: object;
+          persona?: object;
+          skills?: string[];
+        };
+        if (parsed.name) setName(parsed.name);
+        if (parsed.slug) setSlug(parsed.slug);
+        if (parsed.characteristics) setCharacteristics(JSON.stringify(parsed.characteristics, null, 2));
+        if (parsed.appearance) setAppearance(JSON.stringify(parsed.appearance, null, 2));
+        if (parsed.persona) setPersona(JSON.stringify(parsed.persona, null, 2));
+        if (parsed.skills && Array.isArray(parsed.skills)) {
+          setSkills(parsed.skills.join(', '));
+        }
+      } catch {
+        // ignore invalid seed
+      }
+    }
+  }, [entity, seed]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
