@@ -77,8 +77,8 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
 
     try {
       if (auth.mode === 'guest') {
-        const historyPayload = messages.map<GuestChatMessage>((m) => ({
-          role: m.role === 'model' ? 'assistant' : 'user',
+        const historyPayload: GuestChatMessage[] = messages.map((m) => ({
+          role: m.role,
           parts: m.parts,
         }));
         const res = await fetch('/api/guest/ai/chat', {
