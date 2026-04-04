@@ -47,7 +47,10 @@ Both can be deployed on Render using the included `render.yaml` blueprint.
    | `SUPABASE_ANON_KEY` | Same as `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
    | `SUPABASE_SERVICE_ROLE_KEY` | **Required** so the orchestrator can read `models_config` (RLS is admin-only) |
 
-   Optional (orchestrator): `GROQ_API_KEY`, `HF_API_KEY`, `HF_INFERENCE_BASE_URL`, `ENABLED_PROVIDERS`.
+  Optional (orchestrator): `GROQ_API_KEY`, `CEREBRAS_API_KEY`, `SAMBANOVA_API_KEY`, `OPENROUTER_API_KEY`, `HF_API_KEY`, `HF_INFERENCE_BASE_URL`, `ENABLED_PROVIDERS`.
+  Example:
+  - `ENABLED_PROVIDERS=gemini,groq,cerebras,sambanova,openrouter` (recommended baseline)
+  - `ENABLED_PROVIDERS=gemini,groq,cerebras,sambanova,openrouter,huggingface` (if HF endpoint is configured)
 
 4. **Deploy**: Save env and let Render build and deploy. The web service gets `ORCHESTRATOR_URL` from the orchestrator’s URL when the blueprint link is used.
 
@@ -80,7 +83,10 @@ Both can be deployed on Render using the included `render.yaml` blueprint.
 ## Post-deploy
 
 - **Proactive messaging**: Call `POST https://<your-web-url>/api/proactive/trigger` with header `X-Admin-Secret: <ADMIN_SECRET>` from a cron (e.g. Render Cron Job, or external scheduler). See README “Proactive messaging”.
-- **Admin**: Open `https://<your-web-url>/admin` and use the same `ADMIN_SECRET` when prompted.
+- **Admin**: Open `https://<your-web-url>/admin` and sign in with admin credentials. By default:
+  - Username: `admin`
+  - Password: `change-me`
+  You can still use `X-Admin-Secret` for API-only admin access.
 
 ---
 

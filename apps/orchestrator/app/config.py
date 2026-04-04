@@ -55,7 +55,7 @@ class SupabaseSettings:
 
 @dataclass
 class GeminiSettings:
-    api_key: str
+    api_key: str = ""
 
 
 @dataclass
@@ -76,7 +76,16 @@ class HealthSettings:
 @dataclass
 class RoutingSettings:
     """Provider and model routing configuration."""
-    enabled_providers: list[str] = field(default_factory=lambda: ["gemini", "groq", "huggingface"])
+    enabled_providers: list[str] = field(
+        default_factory=lambda: [
+            "gemini",
+            "groq",
+            "cerebras",
+            "sambanova",
+            "openrouter",
+            "huggingface",
+        ]
+    )
     default_priority: int = 100
     default_task_type: str = "skill_text"
     default_postprocess_kind: str = "trim"
@@ -102,8 +111,6 @@ def get_settings() -> AppSettings:
         raise RuntimeError("Supabase URL and key (SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY) not configured for orchestrator")
 
     gemini_key = _env_str("GOOGLE_GEMINI_API_KEY", "GEMINI_API_KEY")
-    if not gemini_key:
-        raise RuntimeError("Gemini API key not configured for orchestrator")
 
     health = HealthSettings(
         rolling_window_size=_env_int("HEALTH_ROLLING_WINDOW_SIZE", 30),
@@ -119,7 +126,10 @@ def get_settings() -> AppSettings:
     )
 
     routing = RoutingSettings(
-        enabled_providers=_env_list("ENABLED_PROVIDERS", ["gemini", "groq", "huggingface"]),
+        enabled_providers=_env_list(
+            "ENABLED_PROVIDERS",
+            ["gemini", "groq", "cerebras", "sambanova", "openrouter", "huggingface"],
+        ),
         default_priority=_env_int("MODEL_DEFAULT_PRIORITY", 100),
         default_task_type=_env_str("DEFAULT_TASK_TYPE", default="skill_text"),
         default_postprocess_kind=_env_str("DEFAULT_POSTPROCESS_KIND", default="trim"),

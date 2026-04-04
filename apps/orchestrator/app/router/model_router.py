@@ -45,6 +45,15 @@ def _build_provider_registry(enabled: list[str]) -> dict[str, Provider]:
             elif name == "groq":
                 from app.providers.groq import GroqProvider
                 registry["groq"] = GroqProvider()
+            elif name == "cerebras":
+                from app.providers.cerebras import CerebrasProvider
+                registry["cerebras"] = CerebrasProvider()
+            elif name == "sambanova":
+                from app.providers.sambanova import SambaNovaProvider
+                registry["sambanova"] = SambaNovaProvider()
+            elif name == "openrouter":
+                from app.providers.openrouter import OpenRouterProvider
+                registry["openrouter"] = OpenRouterProvider()
             elif name == "huggingface":
                 from app.providers.huggingface import HuggingFaceProvider
                 registry["huggingface"] = HuggingFaceProvider()

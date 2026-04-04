@@ -53,13 +53,29 @@ services:
       # Optional providers
       - key: GROQ_API_KEY
         sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: CEREBRAS_BASE_URL
+        value: https://api.cerebras.ai/v1
+      - key: SAMBANOVA_API_KEY
+        sync: false
+      - key: SAMBANOVA_BASE_URL
+        value: https://api.sambanova.ai/v1
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: OPENROUTER_HTTP_REFERER
+        sync: false
+      - key: OPENROUTER_APP_TITLE
+        value: Potaeto
       - key: HF_INFERENCE_BASE_URL
         sync: false
       - key: HF_API_KEY
         sync: false
       # Optional tuning
       - key: ENABLED_PROVIDERS
-        value: gemini
+        value: gemini,groq,cerebras,sambanova,openrouter
       - key: MODELS_CONFIG_CACHE_TTL_SEC
         value: "120"
       - key: HEALTH_RATE_LIMIT_BASE_BACKOFF

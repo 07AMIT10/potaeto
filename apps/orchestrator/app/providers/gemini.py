@@ -26,6 +26,8 @@ class GeminiProvider(Provider):
 
     def __init__(self) -> None:
         settings = get_settings()
+        if not settings.gemini.api_key:
+            raise RuntimeError("Gemini API key not configured for orchestrator")
         self._client = genai.Client(api_key=settings.gemini.api_key)
 
     async def generate_text(self, request: TextRequest) -> TextResponse:
