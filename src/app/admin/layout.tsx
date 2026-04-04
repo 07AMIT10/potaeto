@@ -1,5 +1,6 @@
-import { headers } from 'next/headers';
 import Link from 'next/link';
+import { AdminLoginCard } from './AdminLoginCard';
+import { isAdminSessionValid } from '@/lib/auth/adminAuth';
 
 const ADMIN_LINKS = [
   { href: '/admin', label: 'Overview', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -13,25 +14,9 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const headersList = await headers();
-  const provided = headersList.get('x-admin-secret');
-  const expected = process.env.ADMIN_SECRET;
-
-  if (expected && provided !== expected) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-4">
-        <div className="card p-8 text-center max-w-sm">
-          <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto mb-4">
-            <svg className="w-5 h-5 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-          <p className="text-sm text-[var(--muted)]">
-            Set <code className="text-xs bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">X-Admin-Secret</code> header.
-          </p>
-        </div>
-      </main>
-    );
+  const hasSession = await isAdminSessionValid();
+  if (!hasSession) {
+    return <AdminLoginCard />;
   }
 
   return (
@@ -52,6 +37,11 @@ export default async function AdminLayout({
                 {label}
               </Link>
             ))}
+            <form action="/api/admin/logout" method="post" className="ml-2">
+              <button type="submit" className="btn-ghost text-xs sm:text-sm text-[var(--muted)]">
+                Sign out
+              </button>
+            </form>
           </nav>
         </div>
       </header>

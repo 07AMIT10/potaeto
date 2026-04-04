@@ -1,12 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { ADMIN_USAGE_LOGS_LIMIT, ORCHESTRATOR_URL } from '@/lib/config';
 import { NextResponse } from 'next/server';
-
-function checkAdmin(request: Request): boolean {
-  const secret = request.headers.get('x-admin-secret');
-  const expected = process.env.ADMIN_SECRET;
-  return !expected || secret === expected;
-}
+import { isAdminRequestAuthorized } from '@/lib/auth/adminAuth';
 
 /**
  * PATCH /api/admin/models
@@ -14,7 +9,7 @@ function checkAdmin(request: Request): boolean {
  * Updates a single models_config row. Protected by ADMIN_SECRET.
  */
 export async function PATCH(request: Request) {
-  if (!checkAdmin(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -61,7 +56,7 @@ export async function PATCH(request: Request) {
  * Returns aggregated usage stats across ALL logs (not limited).
  */
 export async function GET(request: Request) {
-  if (!checkAdmin(request)) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

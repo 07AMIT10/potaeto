@@ -1,33 +1,30 @@
-import { createClient } from '@/lib/supabase/server';
 import { CreateForm } from './CreateForm';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export default async function CreatePage({
   searchParams,
 }: {
   searchParams: Promise<{ entity?: string; seed?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId, supabase: resolvedSupabase } = await resolveUserId();
 
   const { entity: entityId, seed } = await searchParams;
   let entity = null;
-  if (entityId && user) {
-    const { data } = await supabase
+  if (entityId && userId) {
+    const { data } = await resolvedSupabase
       .from('entities')
       .select('*')
       .eq('id', entityId)
-      .eq('user_id', user.id)
+      .eq('user_id', userId)
       .single();
     entity = data;
   }
 
-  const entities = user
-    ? await supabase
+  const entities = userId
+    ? await resolvedSupabase
         .from('entities')
         .select('id, name, slug')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .order('created_at', { ascending: false })
     : { data: [] };
 

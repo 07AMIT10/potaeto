@@ -1,14 +1,11 @@
-import { createClient } from '@/lib/supabase/server';
 import { LIBRARY_CONTENT_LIMIT } from '@/lib/config';
 import { LibraryContent } from './LibraryContent';
 import { GuestLibrary } from './GuestLibrary';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export default async function LibraryPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) {
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) {
     return (
       <div className="space-y-6 animate-fade-in">
         <div>
@@ -25,13 +22,13 @@ export default async function LibraryPage() {
   const { data: entities } = await supabase
     .from('entities')
     .select('id, name, slug')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false });
 
   const { data: content } = await supabase
     .from('content')
     .select('id, type, public_url, metadata, created_at, entity_id')
-    .eq('user_id', user.id)
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(LIBRARY_CONTENT_LIMIT);
 

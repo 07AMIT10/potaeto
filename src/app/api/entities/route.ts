@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { resolveUserId } from '@/lib/auth/resolveUserId';
+import { ensureUniqueEntitySlug } from '@/lib/entities/slug';
 
 export async function POST(request: Request) {
   const { userId, supabase } = await resolveUserId();
@@ -7,7 +8,7 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { name, slug, characteristics, appearance, persona, skills } = body;
-  const safeSlug = (slug || 'entity').toString().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') || 'entity';
+  const safeSlug = await ensureUniqueEntitySlug(supabase, userId, slug || 'entity');
 
   const { data, error } = await supabase
     .from('entities')
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
     .single();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 400 });
   }
   return NextResponse.json(data);
 }

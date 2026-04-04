@@ -13,19 +13,28 @@ interface CreateFormProps {
   seed?: string | null;
 }
 
+function stringifyFieldForInput(value: unknown): string {
+  if (!value || typeof value !== 'object') return '';
+  const record = value as { description?: unknown };
+  if (typeof record.description === 'string') {
+    return record.description;
+  }
+  const keys = Object.keys(value as Record<string, unknown>);
+  if (keys.length === 0) return '';
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return '';
+  }
+}
+
 export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
   const router = useRouter();
   const [name, setName] = useState(entity?.name ?? '');
   const [slug, setSlug] = useState(entity?.slug ?? '');
-  const [characteristics, setCharacteristics] = useState(
-    JSON.stringify((entity?.characteristics as object) ?? {}, null, 2)
-  );
-  const [appearance, setAppearance] = useState(
-    JSON.stringify((entity?.appearance as object) ?? {}, null, 2)
-  );
-  const [persona, setPersona] = useState(
-    JSON.stringify((entity?.persona as object) ?? {}, null, 2)
-  );
+  const [characteristics, setCharacteristics] = useState(stringifyFieldForInput(entity?.characteristics));
+  const [appearance, setAppearance] = useState(stringifyFieldForInput(entity?.appearance));
+  const [persona, setPersona] = useState(stringifyFieldForInput(entity?.persona));
   const [skills, setSkills] = useState(
     Array.isArray(entity?.skills) ? (entity.skills as string[]).join(', ') : ''
   );
@@ -38,9 +47,9 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
     if (entity) {
       setName(entity.name);
       setSlug(entity.slug);
-      setCharacteristics(JSON.stringify((entity.characteristics as object) ?? {}, null, 2));
-      setAppearance(JSON.stringify((entity.appearance as object) ?? {}, null, 2));
-      setPersona(JSON.stringify((entity.persona as object) ?? {}, null, 2));
+      setCharacteristics(stringifyFieldForInput(entity.characteristics));
+      setAppearance(stringifyFieldForInput(entity.appearance));
+      setPersona(stringifyFieldForInput(entity.persona));
       setSkills(Array.isArray(entity.skills) ? (entity.skills as string[]).join(', ') : '');
     }
   }, [entity]);
@@ -58,9 +67,9 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
         };
         if (parsed.name) setName(parsed.name);
         if (parsed.slug) setSlug(parsed.slug);
-        if (parsed.characteristics) setCharacteristics(JSON.stringify(parsed.characteristics, null, 2));
-        if (parsed.appearance) setAppearance(JSON.stringify(parsed.appearance, null, 2));
-        if (parsed.persona) setPersona(JSON.stringify(parsed.persona, null, 2));
+        if (parsed.characteristics) setCharacteristics(stringifyFieldForInput(parsed.characteristics));
+        if (parsed.appearance) setAppearance(stringifyFieldForInput(parsed.appearance));
+        if (parsed.persona) setPersona(stringifyFieldForInput(parsed.persona));
         if (parsed.skills && Array.isArray(parsed.skills)) {
           setSkills(parsed.skills.join(', '));
         }
@@ -70,8 +79,11 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
     }
   }, [entity, seed]);
 
-  /** Parse JSON field: accept {} or valid JSON; if invalid, treat as a single description string. */
-  const parseJsonField = (raw: string): object => {
+  /**
+   * Accept plain language, JSON object, or JSON primitive.
+   * Plain language becomes { description: "..." }.
+   */
+  const parseFlexibleField = (raw: string): object => {
     const s = (raw || '').trim();
     if (!s) return {};
     try {
@@ -86,9 +98,11 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
     e.preventDefault();
     setSaving(true);
     setError(null);
-    const charJson = parseJsonField(characteristics);
-    const appearJson = parseJsonField(appearance);
-    const personaJson = parseJsonField(persona);
+    const charJson = parseFlexibleField(characteristics);
+    const appearJson = parseFlexibleField(appearance);
+    const personaJson = parseFlexibleField(persona);
+    const cleanName = name.trim();
+    const cleanSlug = slug.trim();
     const skillsArr = skills
       .split(',')
       .map((s) => s.trim())
@@ -100,8 +114,8 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
         method: entity ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name || 'Unnamed',
-          slug: slug || 'entity',
+          name: cleanName || 'Unnamed',
+          slug: cleanSlug || undefined,
           characteristics: charJson,
           appearance: appearJson,
           persona: personaJson,
@@ -121,8 +135,8 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
     // Guest path: store locally
     const saved = addGuestEntity({
       id: entity?.id,
-      name: name || 'Unnamed',
-      slug: slug || 'entity',
+      name: cleanName || 'Unnamed',
+      slug: cleanSlug || 'entity',
     });
     setSaving(false);
     router.push(`/chat/${saved.id}`);
@@ -148,37 +162,40 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
               type="text"
               value={slug}
               onChange={(e) => setSlug(e.target.value)}
-              placeholder="chef-mario"
+              placeholder="Optional. We can auto-generate it."
               className="input-field"
             />
           </div>
         </div>
 
         <div>
-          <label className="label">Characteristics (JSON)</label>
+          <label className="label">Characteristics</label>
           <textarea
             value={characteristics}
             onChange={(e) => setCharacteristics(e.target.value)}
             rows={3}
-            className="input-field font-mono text-xs"
+            className="input-field"
+            placeholder="Friendly chef who explains each step while cooking."
           />
         </div>
         <div>
-          <label className="label">Appearance (JSON)</label>
+          <label className="label">Appearance</label>
           <textarea
             value={appearance}
             onChange={(e) => setAppearance(e.target.value)}
             rows={3}
-            className="input-field font-mono text-xs"
+            className="input-field"
+            placeholder="Tall, warm smile, wears a red apron."
           />
         </div>
         <div>
-          <label className="label">Persona (JSON)</label>
+          <label className="label">Persona</label>
           <textarea
             value={persona}
             onChange={(e) => setPersona(e.target.value)}
             rows={3}
-            className="input-field font-mono text-xs"
+            className="input-field"
+            placeholder="Encouraging, humorous, and patient with beginners."
           />
         </div>
         <div>

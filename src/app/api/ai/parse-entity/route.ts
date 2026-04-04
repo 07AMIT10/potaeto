@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ORCHESTRATOR_URL } from '@/lib/config';
 import { resolveUserId } from '@/lib/auth/resolveUserId';
+import { ensureUniqueEntitySlug } from '@/lib/entities/slug';
 
 export async function POST(request: Request) {
   const { userId, supabase } = await resolveUserId();
@@ -49,14 +50,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid entity structure from orchestrator' }, { status: 500 });
     }
 
-
-    const slug = entity.slug.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    const slug = await ensureUniqueEntitySlug(supabase, userId, entity.slug || 'entity');
     const { data: inserted, error } = await supabase
       .from('entities')
       .insert({
         user_id: userId,
         name: entity.name,
-        slug: slug || 'entity',
+        slug,
         characteristics: entity.characteristics ?? {},
         appearance: entity.appearance ?? {},
         persona: entity.persona ?? {},
@@ -67,12 +67,6 @@ export async function POST(request: Request) {
       .single();
 
     if (error) {
-      if (error.code === '23505') {
-        return NextResponse.json(
-          { error: 'You already have an entity with this slug. Try a different description.' },
-          { status: 409 }
-        );
-      }
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

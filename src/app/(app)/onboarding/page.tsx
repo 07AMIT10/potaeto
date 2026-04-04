@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthMode } from '@/lib/auth/useAuthMode';
+import { addGuestEntity } from '@/lib/guestStorage';
 
 const VoiceInput = dynamic(
   () => import('@/components/VoiceInput').then((m) => ({ default: m.VoiceInput })),
@@ -37,7 +38,7 @@ export default function OnboardingPage() {
           setLoading(false);
           return;
         }
-        router.push(`/create?entity=${data.id}`);
+        router.push(`/chat/${data.id}`);
       } else {
         const res = await fetch('/api/guest/ai/parse-entity', {
           method: 'POST',
@@ -50,8 +51,9 @@ export default function OnboardingPage() {
           setLoading(false);
           return;
         }
-        const seed = encodeURIComponent(JSON.stringify(data));
-        router.push(`/create?seed=${seed}`);
+        const slug = (data.slug || 'entity').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const saved = addGuestEntity({ name: data.name || 'Unnamed', slug });
+        router.push(`/chat/${saved.id}`);
       }
     } catch {
       setError('Network error');

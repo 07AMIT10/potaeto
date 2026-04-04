@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import type { GuestEntity, GuestContent } from '@/lib/guestStorage';
 import { getCurrentAuthContext } from '@/lib/auth/appAuth';
+import { ensureUniqueEntitySlug } from '@/lib/entities/slug';
 
 type Payload = {
   entities: GuestEntity[];
@@ -30,29 +31,25 @@ export async function POST(request: Request) {
   const entityIdMap: Record<string, string> = {};
 
   if (safeEntities.length > 0) {
-    const rows = safeEntities.map((e) => ({
-      user_id: userId,
-      name: e.name,
-      slug: e.slug,
-      characteristics: {},
-      appearance: {},
-      persona: {},
-      skills: [],
-    }));
-    const { data: inserted, error } = await service
-      .from('entities')
-      .insert(rows)
-      .select('id')
-      .order('created_at', { ascending: false })
-      .limit(rows.length);
+    for (const guestEntity of safeEntities) {
+      const uniqueSlug = await ensureUniqueEntitySlug(service, userId, guestEntity.slug || 'entity');
+      const { data: inserted, error } = await service
+        .from('entities')
+        .insert({
+          user_id: userId,
+          name: guestEntity.name || 'Unnamed',
+          slug: uniqueSlug,
+          characteristics: {},
+          appearance: {},
+          persona: {},
+          skills: [],
+        })
+        .select('id')
+        .single();
 
-    if (!error && inserted) {
-      inserted.forEach((row, idx) => {
-        const guest = safeEntities[idx];
-        if (guest) {
-          entityIdMap[guest.id] = row.id;
-        }
-      });
+      if (!error && inserted) {
+        entityIdMap[guestEntity.id] = inserted.id;
+      }
     }
   }
 

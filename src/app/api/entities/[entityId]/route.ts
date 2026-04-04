@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { resolveUserId } from '@/lib/auth/resolveUserId';
+import { ensureUniqueEntitySlug } from '@/lib/entities/slug';
 
 export async function PATCH(
   request: Request,
@@ -13,7 +14,9 @@ export async function PATCH(
   const { name, slug, characteristics, appearance, persona, skills, is_public } = body;
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (name !== undefined) updates.name = name;
-  if (slug !== undefined) updates.slug = slug;
+  if (slug !== undefined) {
+    updates.slug = await ensureUniqueEntitySlug(supabase, userId, slug, id);
+  }
   if (characteristics !== undefined) updates.characteristics = characteristics;
   if (appearance !== undefined) updates.appearance = appearance;
   if (persona !== undefined) updates.persona = persona;
@@ -28,7 +31,7 @@ export async function PATCH(
     .select('id, name, slug')
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json(data);
 }
 

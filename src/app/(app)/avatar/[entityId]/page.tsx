@@ -1,7 +1,7 @@
-import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { AvatarScriptUI } from './AvatarScriptUI';
+import { resolveUserId } from '@/lib/auth/resolveUserId';
 
 export default async function AvatarPage({
   params,
@@ -9,15 +9,14 @@ export default async function AvatarPage({
   params: Promise<{ entityId: string }>;
 }) {
   const { entityId } = await params;
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { userId, supabase } = await resolveUserId();
+  if (!userId) notFound();
 
   const { data: entity } = await supabase
     .from('entities')
     .select('*')
     .eq('id', entityId)
+    .eq('user_id', userId)
     .single();
 
   if (!entity) notFound();

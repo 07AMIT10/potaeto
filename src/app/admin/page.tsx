@@ -104,7 +104,7 @@ export default async function AdminPage() {
       </section>
 
       <div className="card p-4 text-xs text-[var(--muted)]">
-        Admin is protected by <code className="bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">ADMIN_SECRET</code> header.
+        Admin access uses session login (or <code className="bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">X-Admin-Secret</code> for API calls).
         Use the nav above to explore models, skills, and memory.
       </div>
     </div>

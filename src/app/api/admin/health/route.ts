@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server';
 import { ORCHESTRATOR_URL } from '@/lib/config';
+import { isAdminRequestAuthorized } from '@/lib/auth/adminAuth';
 
 /**
  * GET /api/admin/health
  * Proxies the orchestrator /v1/health endpoint. Protected by ADMIN_SECRET.
  */
 export async function GET(request: Request) {
-  const secret = request.headers.get('x-admin-secret');
-  const expected = process.env.ADMIN_SECRET;
-  if (expected && secret !== expected) {
+  if (!(await isAdminRequestAuthorized(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
