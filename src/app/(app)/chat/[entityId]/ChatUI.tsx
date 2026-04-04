@@ -3,6 +3,9 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuthMode } from '@/lib/auth/useAuthMode';
 import { loadGuestChat, saveGuestChat, type GuestChatMessage } from '@/lib/guestStorage';
+import { PotatoFace } from '@/components/PotatoFace';
+import { MessageContent } from '@/components/MessageContent';
+import { useExpression } from '@/lib/expressions/useExpression';
 
 interface Message {
   role: 'user' | 'model';
@@ -189,6 +192,11 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
     inputRef.current?.focus();
   };
 
+  const latestAssistantText = messages.length > 0 && messages[messages.length - 1].role === 'model'
+    ? messages[messages.length - 1].parts
+    : '';
+  const expression = useExpression(latestAssistantText, streaming);
+
   return (
     <div className="flex-1 flex flex-col card overflow-hidden">
       <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 scrollbar-thin">
@@ -204,43 +212,62 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
 
         {!initialLoading && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="w-14 h-14 rounded-full bg-potato-100 dark:bg-potato-900/30 flex items-center justify-center text-2xl mb-4">
-              {entityName.charAt(0).toUpperCase()}
-            </div>
+            <PotatoFace expression="idle" size={56} className="mb-4 animate-potato-appear" />
             <p className="text-sm text-[var(--muted)] max-w-xs">
               Start a conversation with {entityName}. They&apos;ll stay in character.
             </p>
           </div>
         )}
 
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
-          >
-            <div className={`max-w-[80%] sm:max-w-[70%] ${
-              msg.role === 'user'
-                ? 'rounded-2xl rounded-br-md bg-potato-500 text-white px-4 py-2.5'
-                : 'rounded-2xl rounded-bl-md bg-[var(--card)] border border-[var(--card-border)] px-4 py-2.5'
-            }`}>
-              {msg.proactive && msg.role === 'model' && (
-                <span className="inline-block text-[10px] font-medium text-potato-500 mb-1 uppercase tracking-wide">
-                  {entityName} reached out
-                </span>
+        {messages.map((msg, i) => {
+          const isLastAssistant = msg.role === 'model' && i === messages.length - 1;
+          const isAssistant = msg.role === 'model';
+
+          return (
+            <div
+              key={i}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+            >
+              {isAssistant && (
+                <div className="flex-shrink-0 mr-2 self-end mb-1">
+                  {isLastAssistant ? (
+                    <PotatoFace
+                      expression={expression.state}
+                      intensity={expression.intensity}
+                      size={32}
+                    />
+                  ) : (
+                    <PotatoFace expression="idle" size={32} className="opacity-50" />
+                  )}
+                </div>
               )}
-              <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.parts || '\u200B'}</p>
+              <div className={`max-w-[75%] sm:max-w-[65%] ${
+                msg.role === 'user'
+                  ? 'rounded-2xl rounded-br-md bg-potato-500 text-white px-4 py-2.5'
+                  : 'rounded-2xl rounded-bl-md bg-[var(--card)] border border-[var(--card-border)] px-4 py-2.5'
+              }`}>
+                {msg.proactive && isAssistant && (
+                  <span className="inline-block text-[10px] font-medium text-potato-500 mb-1 uppercase tracking-wide">
+                    {entityName} reached out
+                  </span>
+                )}
+                <MessageContent text={msg.parts} isAssistant={isAssistant} />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {loading && streaming && messages[messages.length - 1]?.role === 'model' && messages[messages.length - 1].parts && (
-          <div className="flex justify-start pl-2">
+          <div className="flex justify-start pl-10">
             <span className="inline-block w-1.5 h-4 bg-potato-400 rounded-full animate-pulse" />
           </div>
         )}
 
         {loading && !streaming && (
           <div className="flex justify-start animate-fade-in">
+            <div className="flex-shrink-0 mr-2 self-end mb-1">
+              <PotatoFace expression="idle" size={32} className="opacity-70" />
+            </div>
             <div className="rounded-2xl rounded-bl-md bg-[var(--card)] border border-[var(--card-border)] px-4 py-3">
               <div className="flex gap-1.5">
                 <span className="typing-dot" style={{ animationDelay: '0ms' }} />
