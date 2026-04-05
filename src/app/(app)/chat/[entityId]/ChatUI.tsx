@@ -3,9 +3,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useAuthMode } from '@/lib/auth/useAuthMode';
 import { loadGuestChat, saveGuestChat, type GuestChatMessage } from '@/lib/guestStorage';
-import { PotatoFace } from '@/components/PotatoFace';
+import { AvatarFace } from '@/components/AvatarFace';
 import { MessageContent } from '@/components/MessageContent';
 import { useExpression } from '@/lib/expressions/useExpression';
+import type { AvatarTemplateId } from '@/lib/avatar/template';
 
 interface Message {
   role: 'user' | 'model';
@@ -16,9 +17,10 @@ interface Message {
 interface ChatUIProps {
   entityId: string;
   entityName: string;
+  avatarTemplate?: AvatarTemplateId;
 }
 
-export function ChatUI({ entityId, entityName }: ChatUIProps) {
+export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: ChatUIProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -212,7 +214,7 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
 
         {!initialLoading && messages.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
-            <PotatoFace expression="idle" size={56} className="mb-4 animate-potato-appear" />
+            <AvatarFace template={avatarTemplate} expression="idle" size={56} className="mb-4 animate-potato-appear" />
             <p className="text-sm text-[var(--muted)] max-w-xs">
               Start a conversation with {entityName}. They&apos;ll stay in character.
             </p>
@@ -231,13 +233,14 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
               {isAssistant && (
                 <div className="flex-shrink-0 mr-2 self-end mb-1">
                   {isLastAssistant ? (
-                    <PotatoFace
+                    <AvatarFace
+                      template={avatarTemplate}
                       expression={expression.state}
                       intensity={expression.intensity}
                       size={32}
                     />
                   ) : (
-                    <PotatoFace expression="idle" size={32} className="opacity-50" />
+                    <AvatarFace template={avatarTemplate} expression="idle" size={32} className="opacity-50" />
                   )}
                 </div>
               )}
@@ -266,7 +269,7 @@ export function ChatUI({ entityId, entityName }: ChatUIProps) {
         {loading && !streaming && (
           <div className="flex justify-start animate-fade-in">
             <div className="flex-shrink-0 mr-2 self-end mb-1">
-              <PotatoFace expression="idle" size={32} className="opacity-70" />
+              <AvatarFace template={avatarTemplate} expression="idle" size={32} className="opacity-70" />
             </div>
             <div className="rounded-2xl rounded-bl-md bg-[var(--card)] border border-[var(--card-border)] px-4 py-3">
               <div className="flex gap-1.5">

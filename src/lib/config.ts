@@ -51,3 +51,7 @@ export const ADMIN_ROUTING_LOGS_LIMIT = envInt('ADMIN_ROUTING_LOGS_LIMIT', 50);
 // ── Library / Share ─────────────────────────────────────────────────
 export const LIBRARY_CONTENT_LIMIT = envInt('LIBRARY_CONTENT_LIMIT', 50);
 export const SHARE_CONTENT_LIMIT = envInt('SHARE_CONTENT_LIMIT', 30);
+
+// ── Public "try" chat on /e/[id] ──────────────────────────────────────
+/** Max user turns per browser (enforced server-side). */
+export const PUBLIC_TRY_MAX_USER_MESSAGES = envInt('PUBLIC_TRY_MAX_USER_MESSAGES', 6);

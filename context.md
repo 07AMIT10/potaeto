@@ -1,8 +1,8 @@
 # Potaeto – Project Context
 
-**Last updated:** After UI/UX overhaul, proactive messaging, streaming fixes, build error resolution, and end-to-end code review.
+**Last updated:** 2026-04-05 — chat **expression system** (rig + templates), **public “try them”** preview chat on entity share pages, **avatar template** (`attributes.avatar_template`), and related APIs/UI.
 
-**Design doc:** See **RESEARCH_AND_DESIGN.md** for: skills pipeline (`pipeline_config`, SkillsService), streaming `/v1/chat/stream`, proactive messaging, admin panel tasks, UI principles, and implementation order. Keep context.md in sync when making structural or feature changes so other agents can navigate.
+**Design docs:** **RESEARCH_AND_DESIGN.md** — skills pipeline, streaming, proactive messaging, admin, UI roadmap. **docs/superpowers/specs/2026-04-05-expression-system-design.md** — expression architecture (parser, fusion, templates). Keep context.md in sync when making structural or feature changes so other agents can navigate.
 
 ## What is Potaeto
 
@@ -11,8 +11,9 @@ Potaeto is a user-friendly, multiplatform MVP app where users:
 2. Describe **WHO and WHAT** they want to build (character/persona) via **text or voice**.
 3. Interact via **chatbot** (streaming) or **script-based avatar** (script + TTS + simple avatar).
 4. Generate **image** and **text** (MVP); video and music planned later.
-5. **Export/share** via entity profile links and direct content links.
+5. **Export/share** via entity profile links and direct content links. Public entity pages (`/e/[id]`) include a **no-login preview chat** so visitors can try a character before signing up or creating their own.
 6. Receive **proactive messages** from their entities (entity reaches out when idle).
+7. **In-chat expressions:** Assistant replies can use `*action*` segments; the UI styles them and drives a small **expression avatar** (template-based: potato, cat, …) next to bubbles.
 
 ## Tech Stack
 
@@ -49,7 +50,8 @@ src/
       chat/[entityId]/     # Chat with entity (streaming + proactive message labels)
       avatar/[entityId]/   # Script-based avatar + TTS
       library/             # Generated content + image/text gen
-      share/               # Share links
+      share/               # Share links (public toggles, copy links)
+    e/[id]/                # Public entity profile + “try them” preview chat (requires is_public)
     api/
       auth/                # Supabase auth callback
       ai/
@@ -63,8 +65,9 @@ src/
           text/            # POST: text generation
       skills/
         songwriter/invoke/ # POST: invoke songwriter skill (orchestrator /v1/skills/{id}/invoke, pipeline_config or legacy)
-      entities/[entityId]/ # GET/PATCH: entity CRUD
+      entities/[entityId]/ # GET/PATCH: entity CRUD (PATCH merges `avatar_template` into `attributes`)
       entities/[entityId]/skill-outputs/ # GET: recent skill_outputs for entity (for Skills history UI)
+      public/entities/[entityId]/chat/  # POST: streaming preview chat for public entities (service client + turn limit)
       conversations/[entityId]/messages/  # GET: load persisted chat history (includes meta for proactive labels)
       proactive/trigger/   # POST: trigger proactive messages for idle conversations (admin-protected)
       admin/
@@ -74,17 +77,27 @@ src/
     SkillsSection.tsx     # Skills block: collapsible, songwriter card + recent outputs list + detail modal
     SongwriterSkillCard   # Invoke songwriter; optional onSuccess callback
     VoiceInput.tsx        # Voice input component using Web Speech API
+    AvatarFace.tsx        # Dispatches expression to template (potato | cat)
+    MessageContent.tsx    # Renders chat text; *action* spans styled for assistant
+    PublicTryChat.tsx     # Client preview chat for /e/[id] (localStorage + public API)
+    avatar/
+      PotatoRig.tsx       # SVG face from shared FaceRigParams
+      CatRig.tsx          # Second template; same rig API
+    PotatoFace.tsx        # Thin wrapper: AvatarFace template=potato (compat)
   lib/
     supabase/              # client, server, middleware
     gemini.ts              # env-driven model config helpers
     chat-memory.ts         # maybeUpdateSummary (used by chat + finalize routes)
+    avatar/template.ts     # AvatarTemplateId, parseAvatarTemplate(attributes)
+    expressions/           # Parser, lexicon, useExpression, FaceRigParams + getRigForExpression
+    publicTryStorage.ts    # localStorage preview threads: potaeto_public_try_chat_{entityId}
   types/
 ```
 
 ## Data Model
 
 - **profiles**: id (→ auth.users), username, avatar_url, gemini_api_key_encrypted, is_public.
-- **entities**: id, user_id, name, slug, characteristics (JSONB), appearance (JSONB), persona (JSONB), skills (JSONB), attributes (JSONB), avatar_asset_url, is_public.
+- **entities**: id, user_id, name, slug, characteristics (JSONB), appearance (JSONB), persona (JSONB), skills (JSONB), attributes (JSONB — e.g. `{ "avatar_template": "potato" | "cat" }` for chat expression avatar), avatar_asset_url, is_public.
 - **content**: id, user_id, entity_id, type (image|video|audio|text), storage_path, public_url, metadata (JSONB).
 - **conversations**: id, user_id, entity_id, title, created_at, updated_at (one per user×entity for now).
 - **messages**: id, conversation_id, user_id, role (`user`/`assistant`/`system`), content, meta (JSONB — includes `{ proactive: true }` for entity-initiated messages), created_at.
@@ -139,22 +152,22 @@ The orchestrator's `ModelRouter` uses a `ProviderHealthTracker` (`app/router/hea
 
 - **Palette:** Warm potato-themed (`potato-50` to `potato-950`). CSS variables: `--foreground`, `--background`, `--card`, `--card-border`, `--muted`, `--accent`.
 - **Components:** `card` (rounded-2xl border shadow), `btn-primary` (potato-500 bg), `btn-secondary` (bordered), `btn-ghost` (transparent hover), `input-field` (rounded-xl with focus ring), `label`, `section-title`, `page-title`.
-- **Animations:** `animate-fade-in` (opacity + translateY), `animate-slide-up` (larger translateY), `typing-dot` (bouncing dots for loading).
-- **Patterns:** Every page uses consistent card wrappers, loading states, error messages. Chat uses proper streaming cursor (blinking bar during stream, bouncing dots while waiting).
+- **Animations:** `animate-fade-in` (opacity + translateY), `animate-slide-up` (larger translateY), `typing-dot` (bouncing dots for loading). **Expression / avatar motion** (Tailwind `theme.extend`): `animate-potato-bounce`, `animate-potato-wiggle`, `animate-potato-tilt`, `animate-potato-sparkle`, `animate-potato-sweat`, `animate-potato-appear`.
+- **Patterns:** Every page uses consistent card wrappers, loading states, error messages. Chat uses proper streaming cursor (blinking bar during stream, bouncing dots while waiting). Assistant messages use **AvatarFace** + **MessageContent** (`*action*` spans italic/muted).
 - **Responsive:** All pages stack vertically on mobile with touch-friendly button sizes.
 - **Scrollbar:** Custom thin scrollbar (`scrollbar-thin` class).
 
 ## Configuration
 
 All tunable values are centralized:
-- **Next.js:** `src/lib/config.ts` — all limits, URLs, thresholds as env-driven constants.
+- **Next.js:** `src/lib/config.ts` — all limits, URLs, thresholds as env-driven constants. Includes **`PUBLIC_TRY_MAX_USER_MESSAGES`** (default 6) for anonymous preview chat on `/e/[id]`.
 - **Orchestrator:** `apps/orchestrator/app/config.py` — `HealthSettings`, `RoutingSettings`, `SupabaseSettings`, `GeminiSettings`, all env-driven with sensible defaults.
 - **`.env.example`:** Documents every available env var with defaults.
 - **No hardcoded magic numbers** in API routes or components — everything imports from config.
 
 ## Deployment
 
-- **Frontend (Next.js):** Deploy to Vercel (or any Node.js host). Set env vars from `.env.example`.
+- **Frontend (Next.js):** Deploy to Vercel (or any Node.js host). Set env vars from `.env.example`. **`SUPABASE_SERVICE_ROLE_KEY`** is required for routes that bypass RLS for safe server-side reads (e.g. **`POST /api/public/entities/[entityId]/chat`** verifies `is_public` before streaming).
 - **Orchestrator (FastAPI):** Deploy to Render using `render.yaml` blueprint. Dockerfile at `apps/orchestrator/Dockerfile`.
   - Health check: `GET /v1/health` (used by Render for liveness).
   - Single worker (`--workers 1`) for free tier memory constraints.
@@ -179,7 +192,7 @@ All tunable values are centralized:
 
 ## Current MVP Scope
 
-- **In:** Login, one WHO/WHAT creation (text + voice), chatbot with streaming + optional TTS, script-based avatar (script + TTS + static avatar), image + text generation, entity profile and content share links, proactive messaging, skills pipeline (songwriter), admin dashboard.
+- **In:** Login, one WHO/WHAT creation (text + voice), chatbot with streaming + optional TTS, script-based avatar (script + TTS + static avatar), image + text generation, entity profile and content share links, **public entity page with limited preview chat** (`/e/[id]`), **in-chat expression avatars** (template from `attributes`), proactive messaging, skills pipeline (songwriter), admin dashboard.
 - **Later:** Video (Veo), music (Lyria), user profile page, multiple entities, full video export, advanced skills (multi-step pipelines with HTTP steps).
 
 ## How to Run
@@ -211,6 +224,16 @@ All tunable values are centralized:
 - **Dynamic route naming:** All routes under `/api/entities/` use `[entityId]` consistently (not `[id]`).
 
 ## Recent Changes (this iteration)
+
+### 2026-04-05 — Expressions, public try-chat, avatar templates
+
+1. **Chat expression system:** Parses `*action*` spans (`src/lib/expressions/parser.ts`); keyword lexicon + speech heuristics (`lexicon.ts`); `useExpression` fuses action/text/history with smoothing/decay; **`FaceRigParams`** + **`getRigForExpression`** (`rig.ts`) feed template renderers.
+2. **Template library:** **`AvatarFace`** switches **`PotatoRig`** / **`CatRig`** from the same rig. **`PotatoFace`** remains a potato-only wrapper. Chat page passes **`avatarTemplate`** from **`parseAvatarTemplate(entity.attributes)`**.
+3. **Create / API:** Create form **“Chat expression avatar”** select; **`POST /api/entities`** sets `attributes.avatar_template`; **`PATCH`** merges `avatar_template` into existing `attributes` without wiping other keys.
+4. **Public “try them”:** **`POST /api/public/entities/[entityId]/chat`** — service client loads **`is_public`** entity, builds system prompt from traits, streams via orchestrator; server-enforced turn cap. **`PublicTryChat`** on **`/e/[id]`** with **`publicTryStorage`**; traits in collapsible **About**; CTAs to onboarding/login.
+5. **Design note:** `docs/superpowers/specs/2026-04-05-expression-system-design.md` documents the expression pipeline.
+
+---
 
 1. **Build fixes:** Resolved dynamic route slug conflict (`[id]` vs `[entityId]` under `/api/entities/`), TypeScript type assertion syntax errors in script/text/image gen routes, missing `@types/react-speech-recognition`, implicit `any` in cookie params, manifest `purpose` type, and SDK `systemInstruction` parameter.
 2. **UI/UX overhaul:** Complete redesign of all pages with custom design system (CSS utility classes), animations, proper streaming indicators, responsive layout, consistent card/button components.

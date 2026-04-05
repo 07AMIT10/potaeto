@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { ChatUI } from './ChatUI';
 import { SkillsSection } from '@/components/SkillsSection';
 import { resolveUserId } from '@/lib/auth/resolveUserId';
+import { parseAvatarTemplate } from '@/lib/avatar/template';
 
 export default async function ChatPage({
   params,
@@ -24,6 +25,8 @@ export default async function ChatPage({
   const { data: entity } = await query;
 
   if (!entity) notFound();
+
+  const avatarTemplate = parseAvatarTemplate(entity.attributes);
 
   return (
     <div className="flex flex-col h-[calc(100vh-5rem)] animate-fade-in">
@@ -56,7 +59,7 @@ export default async function ChatPage({
       </div>
 
       <SkillsSection entityId={entityId} />
-      <ChatUI entityId={entityId} entityName={entity.name} />
+      <ChatUI entityId={entityId} entityName={entity.name} avatarTemplate={avatarTemplate} />
     </div>
   );
 }

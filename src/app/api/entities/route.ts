@@ -7,8 +7,9 @@ export async function POST(request: Request) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { name, slug, characteristics, appearance, persona, skills } = body;
+  const { name, slug, characteristics, appearance, persona, skills, avatar_template } = body;
   const safeSlug = await ensureUniqueEntitySlug(supabase, userId, slug || 'entity');
+  const template = avatar_template === 'cat' ? 'cat' : 'potato';
 
   const { data, error } = await supabase
     .from('entities')
@@ -20,6 +21,7 @@ export async function POST(request: Request) {
       appearance: appearance ?? {},
       persona: persona ?? {},
       skills: skills ?? [],
+      attributes: { avatar_template: template },
     })
     .select('id, name, slug')
     .single();

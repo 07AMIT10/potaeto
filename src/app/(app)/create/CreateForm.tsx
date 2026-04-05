@@ -6,6 +6,7 @@ import Link from 'next/link';
 import type { Entity } from '@/types/database';
 import { useAuthMode } from '@/lib/auth/useAuthMode';
 import { addGuestEntity } from '@/lib/guestStorage';
+import { parseAvatarTemplate, type AvatarTemplateId } from '@/lib/avatar/template';
 
 interface CreateFormProps {
   entity: Entity | null;
@@ -40,6 +41,9 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarTemplate, setAvatarTemplate] = useState<AvatarTemplateId>(() =>
+    entity ? parseAvatarTemplate(entity.attributes) : 'potato'
+  );
 
   const auth = useAuthMode();
 
@@ -51,6 +55,7 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
       setAppearance(stringifyFieldForInput(entity.appearance));
       setPersona(stringifyFieldForInput(entity.persona));
       setSkills(Array.isArray(entity.skills) ? (entity.skills as string[]).join(', ') : '');
+      setAvatarTemplate(parseAvatarTemplate(entity.attributes));
     }
   }, [entity]);
 
@@ -120,6 +125,7 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
           appearance: appearJson,
           persona: personaJson,
           skills: skillsArr,
+          avatar_template: avatarTemplate,
         }),
       });
       const data = await res.json();
@@ -207,6 +213,20 @@ export function CreateForm({ entity, entitiesList, seed }: CreateFormProps) {
             placeholder="cooking, storytelling"
             className="input-field"
           />
+        </div>
+        <div>
+          <label className="label">Chat expression avatar</label>
+          <p className="text-xs text-[var(--muted)] mb-2">
+            Shapes how reactions look next to messages (more styles later).
+          </p>
+          <select
+            value={avatarTemplate}
+            onChange={(e) => setAvatarTemplate(e.target.value as AvatarTemplateId)}
+            className="input-field"
+          >
+            <option value="potato">Potato</option>
+            <option value="cat">Cat</option>
+          </select>
         </div>
       </div>
 

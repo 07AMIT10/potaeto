@@ -11,7 +11,7 @@ export async function PATCH(
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { name, slug, characteristics, appearance, persona, skills, is_public } = body;
+  const { name, slug, characteristics, appearance, persona, skills, is_public, avatar_template } = body;
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (name !== undefined) updates.name = name;
   if (slug !== undefined) {
@@ -22,6 +22,18 @@ export async function PATCH(
   if (persona !== undefined) updates.persona = persona;
   if (skills !== undefined) updates.skills = skills;
   if (typeof is_public === 'boolean') updates.is_public = is_public;
+
+  if (avatar_template !== undefined) {
+    const { data: row } = await supabase
+      .from('entities')
+      .select('attributes')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+    const attrs = (row?.attributes as Record<string, unknown> | null) ?? {};
+    const template = avatar_template === 'cat' ? 'cat' : 'potato';
+    updates.attributes = { ...attrs, avatar_template: template };
+  }
 
   const { data, error } = await supabase
     .from('entities')
