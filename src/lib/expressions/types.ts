@@ -6,7 +6,15 @@ export type ExpressionState =
   | 'concerned'
   | 'sad'
   | 'excited'
-  | 'confused';
+  | 'confused'
+  | 'angry'
+  | 'surprised'
+  | 'shy'
+  | 'proud'
+  | 'sleepy'
+  | 'loving'
+  | 'mischievous'
+  | 'nervous';
 
 export interface ExpressionScore {
   state: ExpressionState;
