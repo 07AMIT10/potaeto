@@ -24,6 +24,36 @@ class TextMessage:
     role: Role
     content: str
 
+    def __getitem__(self, item: str) -> Any:
+        if item == "role":
+            return self.role
+        if item == "content":
+            return self.content
+        raise KeyError(item)
+
+    def __contains__(self, item: object) -> bool:
+        return item in ("role", "content")
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, TextMessage):
+            return self.role == other.role and self.content == other.content
+        if isinstance(other, dict):
+            return self.role == other.get("role") and self.content == other.get("content")
+        return False
+
+    def __hash__(self) -> int:
+        return hash((self.role, self.content))
+
+    def keys(self) -> list[str]:
+        return ["role", "content"]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key == "role":
+            return self.role
+        if key == "content":
+            return self.content
+        return default
+
 
 @dataclass
 class TextRequest:

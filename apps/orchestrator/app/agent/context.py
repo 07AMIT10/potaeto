@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from typing import Any
 
 from app.agent.prompts import build_system_prompt
 from app.db.repositories.base import fetch_one
@@ -32,6 +33,10 @@ MIN_MEMORY_NODES = 8
 #: Token headroom left for the provider's own framing and response overhead.
 CONTEXT_SAFETY_TOKENS = 1024
 TRUNCATION_MARKER = "\n\n[context truncated to fit the model budget]"
+SUMMARY_MARKER_PREFIX = "[Summary of earlier conversation: "
+SUMMARY_MARKER_SUFFIX = "]"
+RECENCY_WINDOW = 10
+ROLLUP_THRESHOLD_RATIO = 0.75
 
 logger = logging.getLogger(__name__)
 
@@ -61,13 +66,20 @@ class ContextBuilder:
 
     def __init__(
         self,
-        conn: sqlite3.Connection,
+        conn: sqlite3.Connection | None = None,
         *,
         token_budget: int = DEFAULT_TOKEN_BUDGET,
+        max_context_tokens: int | None = None,
         memory_scope: str = "global",
     ) -> None:
+        if isinstance(conn, int):
+            token_budget = conn
+            conn = None
+        if max_context_tokens is not None:
+            token_budget = max_context_tokens
         self.conn = conn
         self.token_budget = token_budget
+        self.max_context_tokens = token_budget
         self.CHAR_BUDGET = token_budget * 4  # chars/4 token estimate
         self.memory_scope = memory_scope
         # Larger models get more history and memory nodes, within sane caps.
@@ -77,9 +89,9 @@ class ContextBuilder:
         self.max_memory_nodes = min(
             MAX_MEMORY_NODES_CAP, max(MIN_MEMORY_NODES, token_budget // 3000)
         )
-        self.messages = MessageRepo(conn)
-        self.entities = EntityRepo(conn)
-        self.memory = MemoryService(conn)
+        self.messages = MessageRepo(conn) if conn is not None else None
+        self.entities = EntityRepo(conn) if conn is not None else None
+        self.memory = MemoryService(conn) if conn is not None else None
 
     def build(
         self,
@@ -90,36 +102,181 @@ class ContextBuilder:
         *,
         tools_enabled: bool = True,
     ) -> list[TextMessage]:
-        entity = self.entities.get(entity_id)
-        memories = self.memory.search(
-            user_id,
-            user_message,
-            limit=self.max_memory_nodes,
-            scope=self.memory_scope,
-        )
-        prefix = [
-            TextMessage(
-                role="system",
-                content=build_system_prompt(
-                    entity, memories, tools_enabled=tools_enabled
-                ),
+        entity = self.entities.get(entity_id) if self.entities else None
+        memories = (
+            self.memory.search(
+                user_id,
+                user_message,
+                limit=self.max_memory_nodes,
+                scope=self.memory_scope,
             )
-        ]
+            if self.memory
+            else []
+        )
+        system_prompt = build_system_prompt(
+            entity, memories, tools_enabled=tools_enabled
+        )
 
-        summary = self._summary(conversation_id)
-        if summary:
-            prefix.append(
-                TextMessage(
-                    role="system",
-                    content=f"Summary of the conversation so far:\n{summary}",
-                )
+        existing_summary = self._summary(conversation_id) if self.conn else None
+        if existing_summary:
+            system_prompt = (
+                f"{system_prompt}\n\nSummary of the conversation so far:\n{existing_summary}"
             )
 
         history = self._history(conversation_id)
-        return self._apply_budget(prefix, history, user_message)
+        messages = list(history)
+        if user_message:
+            messages.append(TextMessage(role="user", content=user_message))
+
+        return self.build_context(
+            messages=messages,
+            system_prompt=system_prompt,
+        )
+
+    def build_context(
+        self,
+        messages: list[Any] | None = None,
+        memories: list[Any] | None = None,
+        system_prompt: str = "",
+        *,
+        user_message: str | None = None,
+    ) -> list[TextMessage]:
+        """Assemble context with 75% summary rollup and token budget enforcement."""
+        normalized: list[TextMessage] = []
+        if messages:
+            for m in messages:
+                msg = self._normalize_message(m)
+                if msg.role == "assistant" and not (msg.content or "").strip():
+                    continue
+                normalized.append(msg)
+        if user_message:
+            normalized.append(TextMessage(role="user", content=user_message))
+
+        full_system = (system_prompt or "").strip()
+        if memories:
+            mem_lines = []
+            for mem in memories:
+                if isinstance(mem, str):
+                    mem_lines.append(f"- {mem}")
+                elif hasattr(mem, "id") and hasattr(mem, "content"):
+                    mem_lines.append(f"- [{mem.id}] {mem.content}")
+                elif isinstance(mem, dict):
+                    mid = mem.get("id", "mem")
+                    cnt = mem.get("content", "")
+                    mem_lines.append(f"- [{mid}] {cnt}")
+            if mem_lines:
+                mem_block = "Relevant memories:\n" + "\n".join(mem_lines)
+                full_system = (
+                    f"{full_system}\n\n{mem_block}".strip()
+                    if full_system
+                    else mem_block
+                )
+
+        prefix: list[TextMessage] = []
+        if full_system:
+            prefix.append(TextMessage(role="system", content=full_system))
+
+        threshold_chars = int(self.token_budget * ROLLUP_THRESHOLD_RATIO) * 4
+        prefix_chars = sum(len(m.content) for m in prefix)
+        messages_chars = sum(len(m.content) for m in normalized)
+        total_chars = prefix_chars + messages_chars
+
+        if total_chars > threshold_chars and len(normalized) > RECENCY_WINDOW:
+            older_messages = normalized[:-RECENCY_WINDOW]
+            recent_messages = normalized[-RECENCY_WINDOW:]
+
+            recent_chars = sum(len(m.content) for m in recent_messages)
+            wrapper_len = len(SUMMARY_MARKER_PREFIX) + len(SUMMARY_MARKER_SUFFIX)
+            avail_summary_chars = max(
+                0, threshold_chars - prefix_chars - recent_chars - wrapper_len
+            )
+
+            summary_text = self._roll_up_messages(
+                older_messages, max_chars=avail_summary_chars
+            )
+            summary_msg = TextMessage(
+                role="system",
+                content=f"{SUMMARY_MARKER_PREFIX}{summary_text}{SUMMARY_MARKER_SUFFIX}",
+            )
+
+            current_prefix = list(prefix)
+            if prefix_chars + len(summary_msg.content) + recent_chars > threshold_chars:
+                prefix_allowance = max(
+                    0, threshold_chars - len(summary_msg.content) - recent_chars
+                )
+                if prefix_allowance < prefix_chars:
+                    current_prefix = self._truncate_prefix(
+                        current_prefix, prefix_allowance
+                    )
+
+            assembled = list(current_prefix) + [summary_msg] + list(recent_messages)
+        else:
+            assembled = list(prefix) + list(normalized)
+
+        total_assembled = sum(len(m.content) for m in assembled)
+        if total_assembled > self.CHAR_BUDGET:
+            prefix_msgs = [m for m in assembled if m.role == "system"]
+            hist_msgs = [m for m in assembled if m.role != "system"]
+            assembled = self._apply_budget_to_assembled(prefix_msgs, hist_msgs)
+
+        total = sum(len(m.content) for m in assembled)
+        logger.info(
+            "context assembled: %s chars ~%s tokens (budget %s)",
+            total,
+            total // 4,
+            self.token_budget,
+        )
+        return assembled
+
+    @staticmethod
+    def _normalize_message(msg: Any) -> TextMessage:
+        if isinstance(msg, TextMessage):
+            return msg
+        if isinstance(msg, dict):
+            return TextMessage(
+                role=msg.get("role", "user"),
+                content=msg.get("content", ""),
+            )
+        return TextMessage(
+            role=getattr(msg, "role", "user"),
+            content=getattr(msg, "content", ""),
+        )
+
+    @staticmethod
+    def _roll_up_messages(messages: list[TextMessage], max_chars: int) -> str:
+        """Deterministically summarize older conversation turns."""
+        if not messages:
+            return ""
+        entries: list[str] = []
+        for msg in messages:
+            role = msg.role.capitalize()
+            snippet = " ".join(msg.content.strip().split())
+            if len(snippet) > 80:
+                snippet = snippet[:77] + "..."
+            entries.append(f"{role}: {snippet}")
+
+        header = f"{len(messages)} earlier messages: "
+        body = "; ".join(entries)
+        full = header + body
+
+        if max_chars is not None and len(full) > max_chars:
+            if max_chars >= len(header) + 15:
+                body_avail = max_chars - len(header) - 3
+                full = header + body[:body_avail] + "..."
+            elif max_chars >= len(header):
+                full = header[:max_chars]
+            else:
+                full = f"{len(messages)} earlier messages"[:max_chars]
+        if not full:
+            full = f"{len(messages)} earlier turns"
+        return full
 
     def _history(self, conversation_id: str) -> list[TextMessage]:
-        rows = self.messages.list(conversation_id)[-self.max_messages :]
+        if self.messages is None:
+            return []
+        rows = self.messages.list(conversation_id)[
+            -max(self.max_messages * 4, 100) :
+        ]
         history: list[TextMessage] = []
         for message in rows:
             # An empty assistant row (the provider returned no text before the
@@ -135,6 +292,8 @@ class ContextBuilder:
         return history
 
     def _summary(self, conversation_id: str) -> str | None:
+        if self.conn is None:
+            return None
         row = fetch_one(
             self.conn,
             "SELECT summary FROM conversation_summaries WHERE conversation_id = ?",
@@ -191,6 +350,33 @@ class ContextBuilder:
             total // 4,
             self.token_budget,
         )
+        return result
+
+    def _apply_budget_to_assembled(
+        self,
+        prefix: list[TextMessage],
+        history: list[TextMessage],
+    ) -> list[TextMessage]:
+        """Cap total context at CHAR_BUDGET, dropping oldest history first."""
+        budget = self.CHAR_BUDGET
+        prefix_len = sum(len(m.content) for m in prefix)
+        history_allowance = max(0, budget - prefix_len)
+        selected: list[TextMessage] = []
+        used = 0
+        for message in reversed(history):
+            if used + len(message.content) <= history_allowance:
+                selected.append(message)
+                used += len(message.content)
+            else:
+                break
+        selected.reverse()
+
+        prefix_allowance = max(0, budget - used)
+        if prefix_len > prefix_allowance:
+            prefix = self._truncate_prefix(prefix, prefix_allowance)
+
+        result = list(prefix)
+        result.extend(selected)
         return result
 
     @staticmethod

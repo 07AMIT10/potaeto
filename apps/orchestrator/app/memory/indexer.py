@@ -13,11 +13,14 @@ later walks of the tree.
 from __future__ import annotations
 
 import hashlib
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any
 
 from app.db.repositories.memories import MemoryRepo
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_USER_ID = "u_local"
 
@@ -91,19 +94,25 @@ class MemoryIndexer:
             return 0
 
         changed = 0
+        seen_node_ids: set[str] = set()
         for path in sorted(root.rglob("*.md")):
             relative = path.relative_to(root)
             if any(part.startswith(".") for part in relative.parts):
                 continue
-            raw = path.read_text(encoding="utf-8")
+            try:
+                raw = path.read_text(encoding="utf-8", errors="replace")
+            except Exception as exc:
+                logger.warning("Failed to read %s: %s", path, exc)
+                continue
             meta, body = parse_frontmatter(raw)
             node_id = str(meta.get("id") or "").strip()
             if not node_id:
                 continue  # INDEX.md and other generated files have no node id
 
-            digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            seen_node_ids.add(node_id)
+            digest = hashlib.sha256(raw.encode("utf-8", errors="replace")).hexdigest()
             existing = self.repo.get(node_id, include_deleted=True)
-            if existing is not None and existing.content_hash == digest:
+            if existing is not None and existing.content_hash == digest and not existing.deleted:
                 continue
 
             fields = self._node_fields(meta, body, relative)
@@ -115,12 +124,28 @@ class MemoryIndexer:
                     **fields,
                 )
             else:
-                if existing.status != "active":
+                if existing.status != "active" and not existing.deleted:
                     # Governance wins over a re-walk: refresh content and the
                     # hash, but never resurrect status or user confirmation.
                     fields.pop("user_confirmed", None)
+                if existing.deleted:
+                    fields["deleted"] = 0
+                    fields["status"] = "active"
                 self.repo.update(node_id, content_hash=digest, **fields)
             changed += 1
+
+        # Check for deleted files and record tombstones
+        rows = self.repo.list(include_deleted=False)
+        for memory in rows:
+            if memory.id in seen_node_ids:
+                continue
+            if not memory.source_ref or not memory.source_ref.endswith(".md"):
+                continue
+            file_path = root / memory.source_ref
+            if not file_path.exists():
+                self.repo.update(memory.id, deleted=1, status="inactive")
+                changed += 1
+
         return changed
 
     @staticmethod
