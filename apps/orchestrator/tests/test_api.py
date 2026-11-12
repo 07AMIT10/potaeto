@@ -113,3 +113,62 @@ def test_model_picker_rejects_an_unknown_provider(client, paired_device):
         headers={"Authorization": f"Bearer {paired_device.token}"},
     )
     assert response.status_code == 400
+
+
+def test_memory_api_requires_auth(client):
+    assert client.get("/v1/memory").status_code == 401
+
+
+def test_memory_api_lifecycle(client, paired_device, api_db):
+    from app.memory.service import MemoryService
+
+    headers = {"Authorization": f"Bearer {paired_device.token}"}
+    service = MemoryService(api_db)
+    m = service.add(
+        user_id=paired_device.user_id,
+        entity_id=None,
+        kind="fact",
+        content="Candidate preference",
+        source="web",
+        source_ref=None,
+        confidence=0.5,
+        scope="global",
+        sensitivity="normal",
+        user_confirmed=False,
+    )
+
+    # 1. List memories
+    r = client.get("/v1/memory", headers=headers)
+    assert r.status_code == 200
+    mems = r.json()["memories"]
+    assert any(item["id"] == m.id for item in mems)
+
+    # 2. Confirm candidate
+    r_conf = client.post(f"/v1/memory/{m.id}/confirm", headers=headers)
+    assert r_conf.status_code == 200
+    assert r_conf.json()["user_confirmed"] is True
+    assert service.recall(m.id).user_confirmed == 1
+
+    # 3. Supersede memory
+    r_sup = client.post(
+        f"/v1/memory/{m.id}/supersede",
+        json={"content": "Confirmed preference superseded"},
+        headers=headers,
+    )
+    assert r_sup.status_code == 200
+    new_id = r_sup.json()["by"]
+    assert new_id != m.id
+    assert service.recall(m.id).status == "superseded"
+    assert service.recall(new_id).status == "active"
+
+    # 4. Retract memory
+    r_ret = client.post(f"/v1/memory/{new_id}/retract", headers=headers)
+    assert r_ret.status_code == 200
+    assert service.recall(new_id).status == "retracted"
+
+    # 5. List with filter
+    r_active = client.get("/v1/memory?status=active", headers=headers)
+    assert r_active.status_code == 200
+    active_ids = [item["id"] for item in r_active.json()["memories"]]
+    assert m.id not in active_ids
+    assert new_id not in active_ids

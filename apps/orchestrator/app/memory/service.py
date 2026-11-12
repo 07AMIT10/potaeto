@@ -53,19 +53,21 @@ class MemoryService:
 
     def add(
         self,
-        user_id: str,
-        entity_id: str | None,
-        kind: str,
-        content: str,
-        source: str,
-        source_ref: str | None,
-        confidence: float,
-        scope: str,
-        sensitivity: str,
-        user_confirmed: bool,
+        user_id: str = "u1",
+        entity_id: str | None = None,
+        kind: str = "fact",
+        content: str | None = None,
+        source: str = "user",
+        source_ref: str | None = None,
+        confidence: float = 0.9,
+        scope: str = "global",
+        sensitivity: str = "normal",
+        user_confirmed: bool = True,
         *,
+        body: str | None = None,
+        title: str | None = None,
         valid_from: str | None = None,
-        valid_to: str | None = None,
+        valid_to: str | float | None = None,
     ) -> Memory:
         """Store a new active memory.
 
@@ -73,12 +75,20 @@ class MemoryService:
         a rumour. Untrusted sources are capped at candidate confidence unless
         the user explicitly confirmed the fact.
         """
+        if content is None:
+            if body is not None:
+                content = f"{title}\n\n{body}".strip() if title else body.strip()
+            elif title is not None:
+                content = title.strip()
         source = (source or "").strip()
         content = (content or "").strip()
         if not source:
             raise ValueError("memory writes require a source")
         if not content:
             raise ValueError("memory content must not be empty")
+
+        if isinstance(valid_to, (int, float)):
+            valid_to = datetime.fromtimestamp(valid_to, UTC).strftime("%Y-%m-%d %H:%M:%S")
 
         confidence = _clamp_confidence(confidence)
         if not user_confirmed and source.lower() in UNTRUSTED_SOURCES:
@@ -113,12 +123,13 @@ class MemoryService:
 
     def update(
         self,
-        memory_id: str,
+        memory_id: str | Memory,
         content: str | None = None,
         confidence: float | None = None,
     ) -> Memory:
         """Correct a memory in place; the corrected fact wins on retrieval."""
-        self.recall(memory_id)  # raises LookupError when missing
+        target_id = getattr(memory_id, "id", str(memory_id))
+        self.recall(target_id)  # raises LookupError when missing
         fields: dict[str, object] = {}
         if content is not None:
             content = content.strip()
@@ -128,22 +139,61 @@ class MemoryService:
         if confidence is not None:
             fields["confidence"] = _clamp_confidence(confidence)
         if not fields:
-            return self.recall(memory_id)
-        updated = self.repo.update(memory_id, **fields)
+            return self.recall(target_id)
+        updated = self.repo.update(target_id, **fields)
         self._audit(
             updated.user_id,
             "memory_update",
-            memory_id,
+            target_id,
             {"fields": sorted(fields)},
         )
         return updated
 
-    def supersede(self, old_id: str, new_id: str) -> None:
-        """Replace ``old_id`` with ``new_id``.
+    def supersede(
+        self,
+        old_id: str | Memory,
+        new_id: str | Memory | None = None,
+        *,
+        title: str | None = None,
+        body: str | None = None,
+        content: str | None = None,
+        scope: str | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """Replace ``old_id`` with ``new_id`` or new content.
 
         The old memory becomes ``superseded`` and stops being valid now, so it
         disappears from retrieval while remaining available for audit.
         """
+        old_id_str = getattr(old_id, "id", str(old_id))
+        old = self.recall(old_id_str)
+        if body is not None or content is not None or title is not None:
+            new_scope = scope or old.scope
+            new_mem = self.add(
+                user_id=old.user_id,
+                entity_id=old.entity_id,
+                kind=old.kind,
+                content=content,
+                body=body,
+                title=title,
+                scope=new_scope,
+                source=old.source or "user",
+                source_ref=old.source_ref,
+                confidence=old.confidence,
+                sensitivity=old.sensitivity,
+                user_confirmed=True,
+                **kwargs,
+            )
+            self._apply_supersede(old_id_str, new_mem.id)
+            return new_mem.id
+
+        if new_id is None:
+            raise ValueError("new_id or new content is required to supersede")
+        new_id_str = getattr(new_id, "id", str(new_id))
+        self._apply_supersede(old_id_str, new_id_str)
+        return new_id_str
+
+    def _apply_supersede(self, old_id: str, new_id: str) -> None:
         if old_id == new_id:
             raise ValueError("a memory cannot supersede itself")
         old = self.recall(old_id)
@@ -162,16 +212,30 @@ class MemoryService:
                 {"superseded_by": new_id},
             )
 
-    def retract(self, memory_id: str) -> None:
+    def retract(self, memory_id: str | Memory) -> None:
         """Revoke a memory; it disappears from retrieval and prompts."""
-        memory = self.recall(memory_id)
-        self.repo.update(memory_id, status=RETRACTED, valid_to=utc_now())
+        target_id = getattr(memory_id, "id", str(memory_id))
+        memory = self.recall(target_id)
+        self.repo.update(target_id, status=RETRACTED, valid_to=utc_now())
         self._audit(
             memory.user_id,
             "memory_retract",
-            memory_id,
+            target_id,
             {"previous_status": memory.status},
         )
+
+    def confirm(self, memory_id: str | Memory) -> Memory:
+        """Mark a memory confirmed by the user, promoting it from candidate."""
+        target_id = getattr(memory_id, "id", str(memory_id))
+        mem = self.recall(target_id)
+        updated = self.repo.update(target_id, user_confirmed=1)
+        self._audit(
+            updated.user_id,
+            "memory_confirm",
+            target_id,
+            {"previous_confirmed": mem.user_confirmed},
+        )
+        return updated
 
     def _audit(
         self,
@@ -187,11 +251,12 @@ class MemoryService:
 
     def search(
         self,
-        user_id: str,
-        query: str,
+        query_or_user_id: str,
+        query: str | None = None,
         limit: int = 10,
         *,
         scope: str = "global",
+        user_id: str | None = None,
     ) -> list[Memory]:
         """Return active, currently-valid memories relevant to ``query``.
 
@@ -205,6 +270,13 @@ class MemoryService:
         Passing a project scope widens the result to ``global`` + that project,
         so project-private facts never leak into an unrelated context.
         """
+        if query is None:
+            actual_query = query_or_user_id
+            actual_user_id = user_id or "u1"
+        else:
+            actual_user_id = query_or_user_id
+            actual_query = query
+
         scopes = ["global"] if scope == "global" else ["global", scope]
         placeholders = ", ".join("?" for _ in scopes)
         base_filter = (
@@ -213,7 +285,7 @@ class MemoryService:
             f"AND m.scope IN ({placeholders})"
         )
 
-        match = fts_any_query(query)
+        match = fts_any_query(actual_query)
         if match:
             rows = fetch_all(
                 self.conn,
@@ -225,7 +297,7 @@ class MemoryService:
                 ORDER BY bm25(memories_fts), m.confidence DESC
                 LIMIT ?
                 """,
-                (match, user_id, ACTIVE, *scopes, limit),
+                (match, actual_user_id, ACTIVE, *scopes, limit),
             )
             if rows:
                 return [from_row(Memory, row) for row in rows]
@@ -238,10 +310,11 @@ class MemoryService:
             ORDER BY m.updated_at DESC, m.confidence DESC, m.rowid DESC
             LIMIT ?
             """,
-            (user_id, ACTIVE, *scopes, limit),
+            (actual_user_id, ACTIVE, *scopes, limit),
         )
         return [from_row(Memory, row) for row in rows]
 
-    def recall(self, memory_id: str) -> Memory:
+    def recall(self, memory_id: str | Memory) -> Memory:
         """Return one memory by id, including superseded/retracted rows."""
-        return self.repo.require(self.repo.get(memory_id), "memory", memory_id)
+        target_id = getattr(memory_id, "id", str(memory_id))
+        return self.repo.require(self.repo.get(target_id), "memory", target_id)

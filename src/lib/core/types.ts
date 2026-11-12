@@ -6,11 +6,32 @@
  * wire shapes emitted by the FastAPI core (see `apps/orchestrator/app/api/`).
  */
 
-export type AgentEventType = 'token' | 'tool_call' | 'tool_result' | 'done' | 'error';
+export type AgentEventType = 'token' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'approval_required';
 
 export interface AgentEvent {
   type: AgentEventType;
   data: Record<string, unknown>;
+}
+
+export type StreamEvent =
+  | { type: 'token'; data: { text: string } }
+  | { type: 'tool_call'; data: { tool_name: string; arguments: Record<string, unknown> } }
+  | { type: 'tool_result'; data: { tool_name: string; result: unknown } }
+  | { type: 'approval_required'; data: { approval_id: string; tool_name: string; arguments: Record<string, unknown> } }
+  | { type: 'done'; data: { message_id?: string; [key: string]: unknown } }
+  | { type: 'error'; data: { message?: string; code?: string; [key: string]: unknown } };
+
+export interface ApprovalRequest {
+  id: string;
+  action_hash: string;
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  expires_at: number;
+  created_at: number;
+  requested_by?: string;
+  resolved_by?: string | null;
+  resolved_at?: number | null;
 }
 
 export interface ChatStreamInput {
@@ -90,3 +111,25 @@ export interface ModelCatalog {
 }
 
 export type MessageRole = 'user' | 'assistant';
+
+export type MemoryStatus = 'active' | 'superseded' | 'retracted';
+
+export interface MemoryItem {
+  id: string;
+  userId: string;
+  entityId: string | null;
+  kind: string;
+  content: string;
+  source: string | null;
+  sourceRef: string | null;
+  confidence: number;
+  sensitivity: string;
+  scope: string;
+  status: MemoryStatus;
+  validFrom: string | null;
+  validTo: string | null;
+  supersedes: string | null;
+  userConfirmed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

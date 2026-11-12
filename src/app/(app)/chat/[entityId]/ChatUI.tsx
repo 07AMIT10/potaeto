@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useCore } from '@/components/providers/CoreProvider';
 import { ulid } from '@/lib/core/ulid';
 import { ChatBase, type ChatMessage } from '@/components/chat/ChatBase';
@@ -305,6 +306,14 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
       onRegenerate={regenerate}
       headerContent={
         <div className="flex items-center justify-end gap-1 px-4 pt-2">
+          <Link
+            href="/memory"
+            className="btn-ghost p-2 text-[var(--muted)] hover:text-potato-600 transition-colors"
+            title="Memory governance"
+            aria-label="Memory governance"
+          >
+            🧠
+          </Link>
           <ModelPicker />
           <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
           <ChatExport messages={messages} entityName={entityName} />

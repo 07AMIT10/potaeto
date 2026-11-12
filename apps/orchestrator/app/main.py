@@ -22,6 +22,7 @@ from app.api.chat import router as chat_router
 from app.api.errors import install_error_handlers
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
+from app.api.memory import router as memory_router
 from app.api.models import router as models_router
 from app.api.sync import router as sync_router
 from app.api.voice import router as voice_router
@@ -133,6 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sync_router)
     app.include_router(jobs_router)
     app.include_router(models_router)
+    app.include_router(memory_router)
     app.include_router(chat_router)
     app.include_router(voice_router)
     app.include_router(approvals_router)

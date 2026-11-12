@@ -11,9 +11,12 @@
 
 import type {
   AgentEvent,
+  ApprovalRequest,
   CatalogModel,
   ChatStreamInput,
   ConversationInfo,
+  MemoryItem,
+  MemoryStatus,
   ModelCatalog,
   PrimaryAgent,
   PushOperation,
@@ -76,12 +79,57 @@ interface WireModelCatalog {
   active_model: string | null;
   active_provider: string | null;
 }
+interface WireMemoryItem {
+  id: string;
+  user_id: string;
+  entity_id: string | null;
+  kind: string;
+  content: string;
+  source: string | null;
+  source_ref: string | null;
+  confidence: number;
+  sensitivity: string;
+  scope: string;
+  status: MemoryStatus;
+  valid_from: string | null;
+  valid_to: string | null;
+  supersedes: string | null;
+  user_confirmed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+interface WireMemoryListResponse {
+  memories: WireMemoryItem[];
+}
+
+function normalizeMemory(m: WireMemoryItem): MemoryItem {
+  return {
+    id: m.id,
+    userId: m.user_id,
+    entityId: m.entity_id,
+    kind: m.kind,
+    content: m.content,
+    source: m.source,
+    sourceRef: m.source_ref,
+    confidence: m.confidence,
+    sensitivity: m.sensitivity,
+    scope: m.scope,
+    status: m.status,
+    validFrom: m.valid_from,
+    validTo: m.valid_to,
+    supersedes: m.supersedes,
+    userConfirmed: m.user_confirmed,
+    createdAt: m.created_at,
+    updatedAt: m.updated_at,
+  };
+}
 
 export class CoreClient {
   private readonly baseUrl: string;
 
-  constructor({ baseUrl }: CoreClientOptions) {
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+  constructor(optionsOrUrl: CoreClientOptions | string = '') {
+    const url = typeof optionsOrUrl === 'string' ? optionsOrUrl : optionsOrUrl?.baseUrl ?? '';
+    this.baseUrl = url.replace(/\/+$/, '');
   }
 
   /** The seeded primary agent (`e_potaeto`). Requires a paired device. */
@@ -121,6 +169,68 @@ export class CoreClient {
       method: 'POST',
       body: JSON.stringify({ model, provider: provider || undefined }),
     });
+  }
+
+  /** Fetch memories for governance, optionally filtered by status. */
+  async getMemories(status?: MemoryStatus): Promise<MemoryItem[]> {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    const res = await this.requestJson<WireMemoryListResponse | WireMemoryItem[]>(`/v1/memory${qs}`);
+    const list = Array.isArray(res) ? res : res.memories;
+    return list.map(normalizeMemory);
+  }
+
+  /** Retract a memory so it no longer influences retrieval or prompts. */
+  async retractMemory(memoryId: string): Promise<void> {
+    await this.requestJson<unknown>(`/v1/memory/${encodeURIComponent(memoryId)}/retract`, {
+      method: 'POST',
+    });
+  }
+
+  /** Supersede an older memory with new content. */
+  async supersedeMemory(memoryId: string, content: string): Promise<void> {
+    await this.requestJson<unknown>(`/v1/memory/${encodeURIComponent(memoryId)}/supersede`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  /** Confirm a candidate memory, promoting it to user-confirmed. */
+  async confirmMemory(memoryId: string): Promise<void> {
+    await this.requestJson<unknown>(`/v1/memory/${encodeURIComponent(memoryId)}/confirm`, {
+      method: 'POST',
+    });
+  }
+
+  /** Resolve a pending tool-call approval. */
+  async resolveApproval(
+    approvalId: string,
+    decision: 'approved' | 'rejected'
+  ): Promise<{ id: string; status: string; [key: string]: unknown }> {
+    const response = await fetch(
+      `${this.baseUrl}/v1/approvals/${encodeURIComponent(approvalId)}/resolve`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ decision }),
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to resolve approval: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  /** Fetch pending unexpired tool-call approvals. */
+  async getPendingApprovals(): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/v1/approvals/pending`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch approvals: ${response.statusText}`);
+    }
+    return response.json();
   }
 
   /** Pull the change log after the device cursor. */

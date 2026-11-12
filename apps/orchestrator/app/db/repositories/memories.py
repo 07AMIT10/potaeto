@@ -31,6 +31,17 @@ class Memory:
     deleted: int
     content_hash: str | None = None
 
+    def __getitem__(self, item: str) -> Any:
+        if item == "body":
+            return self.content
+        if hasattr(self, item):
+            return getattr(self, item)
+        raise KeyError(item)
+
+    @property
+    def body(self) -> str:
+        return self.content
+
 
 class MemoryRepo(BaseRepo):
     table = "memories"

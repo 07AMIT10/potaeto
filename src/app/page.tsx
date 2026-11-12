@@ -39,16 +39,31 @@ export default function HomePage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 max-w-lg mx-auto">
             {[
-              { icon: '💬', label: 'Chat' },
-              { icon: '🧠', label: 'Memory' },
-              { icon: '⏰', label: 'Schedules' },
-              { icon: '📈', label: 'Monitor' },
-            ].map((f) => (
-              <div key={f.label} className="card p-3 text-center">
-                <span className="text-2xl block mb-1">{f.icon}</span>
-                <span className="text-xs font-medium text-[var(--muted)]">{f.label}</span>
-              </div>
-            ))}
+              { icon: '💬', label: 'Chat', href: '/chat' },
+              { icon: '🧠', label: 'Memory', href: '/memory' },
+              { icon: '⏰', label: 'Schedules', href: null },
+              { icon: '📈', label: 'Monitor', href: null },
+            ].map((f) => {
+              const content = (
+                <>
+                  <span className="text-2xl block mb-1">{f.icon}</span>
+                  <span className="text-xs font-medium text-[var(--muted)]">{f.label}</span>
+                </>
+              );
+              return f.href ? (
+                <Link
+                  key={f.label}
+                  href={f.href}
+                  className="card p-3 text-center transition-all hover:border-potato-300 dark:hover:border-potato-700 hover:shadow-sm"
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={f.label} className="card p-3 text-center">
+                  {content}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

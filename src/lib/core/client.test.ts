@@ -145,4 +145,59 @@ describe('CoreClient', () => {
     const client = new CoreClient({ baseUrl: 'http://core' });
     await expect(client.getPrimaryAgent()).rejects.toMatchObject({ status: 401 });
   });
+
+  it('fetches memories and maps snake_case wire shape', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse({
+          memories: [
+            {
+              id: 'mem_1',
+              user_id: 'u1',
+              entity_id: 'e1',
+              kind: 'fact',
+              content: 'User prefers Neovim',
+              source: 'user',
+              source_ref: null,
+              confidence: 0.9,
+              sensitivity: 'normal',
+              scope: 'project:Anveshak',
+              status: 'active',
+              valid_from: null,
+              valid_to: null,
+              supersedes: null,
+              user_confirmed: true,
+              created_at: '2026-11-13T00:00:00Z',
+              updated_at: '2026-11-13T00:00:00Z',
+            },
+          ],
+        })
+      )
+    );
+    const client = new CoreClient({ baseUrl: 'http://core' });
+    const mems = await client.getMemories('active');
+    expect(mems).toHaveLength(1);
+    expect(mems[0].content).toBe('User prefers Neovim');
+    expect(mems[0].userId).toBe('u1');
+    expect(mems[0].userConfirmed).toBe(true);
+  });
+
+  it('posts retract, supersede, and confirm memory calls', async () => {
+    const fetchMock = vi.fn().mockImplementation(() => jsonResponse({ status: 'ok' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new CoreClient({ baseUrl: 'http://core' });
+
+    await client.retractMemory('mem_1');
+    expect(fetchMock.mock.calls[0][0]).toBe('http://core/v1/memory/mem_1/retract');
+
+    await client.supersedeMemory('mem_1', 'New content');
+    expect(fetchMock.mock.calls[1][0]).toBe('http://core/v1/memory/mem_1/supersede');
+    expect(JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)).toEqual({
+      content: 'New content',
+    });
+
+    await client.confirmMemory('mem_1');
+    expect(fetchMock.mock.calls[2][0]).toBe('http://core/v1/memory/mem_1/confirm');
+  });
 });
