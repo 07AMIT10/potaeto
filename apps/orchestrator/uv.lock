@@ -1251,7 +1251,9 @@ dependencies = [
     { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "pydantic" },
+    { name = "pyserial-asyncio" },
     { name = "python-dotenv" },
+    { name = "python-multipart" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1277,10 +1279,12 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=0.26.0" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "pydantic", specifier = ">=2.8.0" },
+    { name = "pyserial-asyncio", specifier = ">=0.6" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pytest-httpx", marker = "extra == 'dev'" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
+    { name = "python-multipart", specifier = ">=0.0.33" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "supabase", specifier = ">=2.5.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30.0" },
@@ -1620,6 +1624,27 @@ crypto = [
 ]
 
 [[package]]
+name = "pyserial"
+version = "3.5"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1e/7d/ae3f0a63f41e4d2f6cb66a5b57197850f919f59e558159a4dd3a818f5082/pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb", size = 159125, upload-time = "2020-11-23T03:59:15.045Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0", size = 90585, upload-time = "2020-11-23T03:59:13.41Z" },
+]
+
+[[package]]
+name = "pyserial-asyncio"
+version = "0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/9a/8477699dcbc1882ea51dcff4d3c25aa3f2063ed8f7d7a849fd8f610506b6/pyserial-asyncio-0.6.tar.gz", hash = "sha256:b6032923e05e9d75ec17a5af9a98429c46d2839adfaf80604d52e0faacd7a32f", size = 31322, upload-time = "2021-09-30T22:29:02.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/24/c820cf15f87f7b164e83710c1852d4f900d9793961579e5ef64189bc0c10/pyserial_asyncio-0.6-py3-none-any.whl", hash = "sha256:de9337922619421b62b9b1a84048634b3ac520e1d690a674ed246a2af7ce1fc5", size = 7594, upload-time = "2021-09-30T22:29:00.12Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1680,6 +1705,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/74/26/2fbeedb218a787a5eea551c7532cac4e009f83d689dd2faa0d0353473f86/python_dotenv-1.2.4.tar.gz", hash = "sha256:f0d53e69935a851c0dcc78f3ab7aaccd8cabef0b92382b576b824212902873c0", size = 60824, upload-time = "2026-10-01T05:36:10Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/60/d1/38f3a3405989a89ac18390803e70c6ad7c7760da4f9b83cbeca0c44a0c72/python_dotenv-1.2.4-py3-none-any.whl", hash = "sha256:42269a8a5b3fd54ffa6f3d84b18abed50064717576b4ecf03dc4a55d8aa04fdc", size = 23266, upload-time = "2026-10-01T05:36:08.633Z" },
+]
+
+[[package]]
+name = "python-multipart"
+version = "0.0.33"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/b7/15b905f6142a9a8a68f66900788da1a32e4d4254452783b37ad1eccb0506/python_multipart-0.0.33.tar.gz", hash = "sha256:b8112424a6abd162ec08d390565dd113ad699f2fe6fef3c987b8bbcbfe9e390d", size = 50499, upload-time = "2026-10-31T14:23:47.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/dd/1b/6b1b4164ec734cac911460ab599bfbe46afedd42c5c9627fe4235942c314/python_multipart-0.0.33-py3-none-any.whl", hash = "sha256:8f16c07b36add9da6b2ee87d3efcaf0a45a6de9c3d0a5dd94e9ccf7675a7bc45", size = 32253, upload-time = "2026-10-31T14:23:46.33Z" },
 ]
 
 [[package]]

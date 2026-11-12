@@ -23,6 +23,7 @@ from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.models import router as models_router
 from app.api.sync import router as sync_router
+from app.api.voice import router as voice_router
 from app.config import Settings, get_settings
 from app.db.connection import connect_db, run_migrations
 from app.memory.indexer import MemoryIndexer
@@ -132,6 +133,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(jobs_router)
     app.include_router(models_router)
     app.include_router(chat_router)
+    app.include_router(voice_router)
     return app
 
 
