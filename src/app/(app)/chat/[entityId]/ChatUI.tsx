@@ -62,7 +62,7 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   // A message that is cached/queued but has no assistant answer yet. The
   // banner lets the user retry the turn after reconnecting instead of leaving
   // a silent gap (a full offline agent turn is out of scope for Release 1).
-  const [awaitingReply, setAwaitingReply] = useState<{ text: string } | null>(null);
+  const [awaitingReply, setAwaitingReply] = useState<{ text: string; clientMessageId: string } | null>(null);
 
   // -----------------------------------------------------------------------
   // Load history from the local IndexedDB cache
@@ -184,7 +184,7 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
           if (last.role === 'model' && !last.parts) next.pop();
           return next;
         });
-        if (!full) setAwaitingReply({ text });
+        if (!full) setAwaitingReply({ text, clientMessageId: messageId });
       } finally {
         setStreaming(false);
         setLoading(false);
@@ -204,9 +204,9 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   // message is already cached/pushed, so this must not add a second copy.
   const retryAwaitingReply = useCallback(() => {
     if (!awaitingReply || loading) return;
-    const text = awaitingReply.text;
+    const { text, clientMessageId } = awaitingReply;
     setAwaitingReply(null);
-    void streamTurn(text, { addUser: false });
+    void streamTurn(text, { clientMessageId, addUser: false });
   }, [awaitingReply, loading, streamTurn]);
 
   // -----------------------------------------------------------------------

@@ -46,9 +46,9 @@ class MemoryTools:
     """Tool wrapper around :class:`MemoryService` for one agent.
 
     ``default_scope`` is the scope used when the model omits ``scope`` on a
-    search. It defaults to ``global`` for backwards compatibility, but the loop
-    passes its configured project scope so a bare ``memory_search`` call sees the
-    same project nodes as the assembled context.
+    search or write. It defaults to ``global`` for backwards compatibility, but
+    the loop passes its configured project scope so bare memory operations stay
+    scoped to the current project.
     """
 
     def __init__(self, conn: sqlite3.Connection, default_scope: str = "global") -> None:
@@ -87,7 +87,7 @@ class MemoryTools:
         source: str,
         kind: str = "fact",
         entity_id: str | None = None,
-        scope: str = "global",
+        scope: str | None = None,
         source_ref: str | None = None,
         confidence: float = 0.5,
         sensitivity: str = "normal",
@@ -97,6 +97,7 @@ class MemoryTools:
         The model cannot set ``user_confirmed``: this tool always writes
         ``False`` and confirmation is a separate authenticated action.
         """
+        resolved_scope = scope or self.default_scope
         memory = self.service.add(
             user_id,
             entity_id,
@@ -105,7 +106,7 @@ class MemoryTools:
             source,
             source_ref,
             confidence,
-            scope,
+            resolved_scope,
             sensitivity,
             False,
         )
@@ -136,10 +137,11 @@ class MemoryTools:
         summary: str,
         *,
         source: str = "agent",
-        scope: str = "global",
+        scope: str | None = None,
         source_ref: str | None = None,
     ) -> dict[str, Any]:
         """Record a session/journal note as an unconfirmed memory node."""
+        resolved_scope = scope or self.default_scope
         memory = self.service.add(
             user_id,
             None,
@@ -148,7 +150,7 @@ class MemoryTools:
             source,
             source_ref,
             0.6,
-            scope,
+            resolved_scope,
             "normal",
             False,
         )

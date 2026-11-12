@@ -328,6 +328,50 @@ def test_memory_search_defaults_to_the_tools_scope(db):
     assert MemoryTools(db).memory_search("u1", "coffee") == []
 
 
+def test_memory_add_defaults_to_the_tools_scope(db):
+    """Bare memory_add writes to the configured scope, not hardcoded global."""
+    project_tools = MemoryTools(db, default_scope="project:Anveshak")
+    # Omitted scope
+    added_omitted = project_tools.memory_add("u1", "Alex uses Vim", source="agent")
+    assert added_omitted["scope"] == "project:Anveshak"
+
+    # Explicit scope=None
+    added_none = project_tools.memory_add("u1", "Alex uses Emacs", source="agent", scope=None)
+    assert added_none["scope"] == "project:Anveshak"
+
+    # Explicit scope overrides default
+    added_explicit = project_tools.memory_add(
+        "u1", "Alex lives on Earth", source="agent", scope="global"
+    )
+    assert added_explicit["scope"] == "global"
+
+    # Default MemoryTools defaults to global
+    default_tools = MemoryTools(db)
+    added_default = default_tools.memory_add("u1", "Alex prefers tea", source="agent")
+    assert added_default["scope"] == "global"
+
+
+def test_memory_journal_defaults_to_the_tools_scope(db):
+    """Bare memory_journal writes to the configured scope, not hardcoded global."""
+    project_tools = MemoryTools(db, default_scope="project:Anveshak")
+    # Omitted scope
+    j_omitted = project_tools.memory_journal("u1", "Session wrap-up")
+    assert j_omitted["scope"] == "project:Anveshak"
+
+    # Explicit scope=None
+    j_none = project_tools.memory_journal("u1", "Session wrap-up 2", scope=None)
+    assert j_none["scope"] == "project:Anveshak"
+
+    # Explicit scope overrides default
+    j_explicit = project_tools.memory_journal("u1", "Global wrap-up", scope="global")
+    assert j_explicit["scope"] == "global"
+
+    # Default MemoryTools defaults to global
+    default_tools = MemoryTools(db)
+    j_default = default_tools.memory_journal("u1", "Default wrap-up")
+    assert j_default["scope"] == "global"
+
+
 def test_memory_search_truncates_content_but_recall_returns_full(db):
     """Search results are pointers; recall is the explicit full expansion."""
     tools = MemoryTools(db)
