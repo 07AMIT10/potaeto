@@ -17,16 +17,19 @@ Voice notes, TTS, and drafted streaming messages are Release 2.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sqlite3
 from typing import Any
 
 from app.db.constants import LOCAL_USER_ID, PRIMARY_ENTITY_ID
+from app.db.repositories.approvals import ApprovalRepo
 from app.db.repositories.base import fetch_one, transaction
 from app.db.repositories.conversations import ConversationRepo
 from app.db.repositories.jobs import JobRepo
 from app.telegram.client import TelegramClient, TelegramError
 from app.telegram.text import split_utf16
+from app.tools.registry import ApprovalRequiredError
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +70,7 @@ class TelegramBot:
         *,
         poll_timeout: int = 50,
         retry_delay: float = 1.0,
+        approval_repo: ApprovalRepo | None = None,
     ) -> None:
         self.client = client
         self.db = db
@@ -75,6 +79,9 @@ class TelegramBot:
         self.poll_timeout = poll_timeout
         self.retry_delay = retry_delay
         self.conversations = ConversationRepo(db)
+        self.approval_repo = (
+            approval_repo if approval_repo is not None else ApprovalRepo(db)
+        )
         self._paused: set[int] = set()
         # In-flight replies and send attempts survive redelivery of the same
         # update, so a failed send never re-runs (and re-bills) the agent.
@@ -140,6 +147,9 @@ class TelegramBot:
         if not isinstance(update_id, int):
             return False
 
+        if "callback_query" in update:
+            return await self._handle_callback_query_update(update)
+
         message = update.get("message")
         if not isinstance(message, dict):
             self._record_update(update_id, None)
@@ -168,6 +178,105 @@ class TelegramBot:
         self._mark_processed(update_id)
         return delivered
 
+    async def _handle_callback_query_update(self, update: dict[str, Any]) -> bool:
+        update_id = update["update_id"]
+        cbq = update.get("callback_query") or {}
+        from_user = cbq.get("from") or {}
+        chat_id = _as_int(from_user.get("id"))
+        if chat_id is None:
+            msg = cbq.get("message") or {}
+            chat = msg.get("chat") or {}
+            chat_id = _as_int(chat.get("id"))
+
+        if chat_id is None or chat_id not in self.allowed_chat_ids:
+            self._record_update(update_id, chat_id)
+            self._mark_processed(update_id)
+            return False
+
+        self._record_update(update_id, chat_id)
+        if self._is_processed(update_id):
+            return False
+
+        delivered = await self._handle_callback_query(update, chat_id=chat_id)
+        self._mark_processed(update_id)
+        return delivered
+
+    async def _handle_callback_query(
+        self, query_or_update: dict[str, Any], chat_id: int | None = None
+    ) -> bool:
+        """Handle an inline callback query (e.g. tool approval)."""
+        if "callback_query" in query_or_update:
+            cbq = query_or_update["callback_query"]
+        else:
+            cbq = query_or_update
+
+        if chat_id is None:
+            from_user = cbq.get("from") or {}
+            chat_id = _as_int(from_user.get("id"))
+            if chat_id is None:
+                msg = cbq.get("message") or {}
+                chat = msg.get("chat") or {}
+                chat_id = _as_int(chat.get("id"))
+
+        if chat_id is None or chat_id not in self.allowed_chat_ids:
+            return False
+
+        query_id = cbq.get("id")
+        data = (cbq.get("data") or "").strip()
+        if not data.startswith("appr:"):
+            if query_id and hasattr(self.client, "answer_callback_query"):
+                try:
+                    await asyncio.to_thread(self.client.answer_callback_query, query_id)
+                except Exception:
+                    pass
+            return False
+
+        parts = data.split(":")
+        if len(parts) < 3:
+            return False
+
+        approval_id = parts[1]
+        decision_str = parts[2].lower()
+        decision = "approved" if decision_str in ("yes", "approve") else "rejected"
+        resolved_by = f"tg_{chat_id}"
+
+        resolved = self.approval_repo.resolve(
+            approval_id, decision, resolved_by=resolved_by
+        )
+
+        answer_text = "Approved" if decision == "approved" else "Rejected"
+        if resolved is None:
+            answer_text = "Expired or already resolved"
+
+        if query_id and hasattr(self.client, "answer_callback_query"):
+            try:
+                await asyncio.to_thread(
+                    self.client.answer_callback_query, query_id, text=answer_text
+                )
+            except Exception:
+                logger.warning("failed to answer callback query %s", query_id)
+
+        msg = cbq.get("message") or {}
+        msg_id = msg.get("message_id") if isinstance(msg, dict) else None
+
+        status_text = (
+            "✅ Approved command" if decision == "approved" else "❌ Rejected command"
+        )
+        if resolved is None:
+            status_text = f"⚠️ Approval {approval_id} already resolved or expired."
+
+        if msg_id and hasattr(self.client, "edit_message_text"):
+            try:
+                await asyncio.to_thread(
+                    self.client.edit_message_text, chat_id, msg_id, status_text
+                )
+            except Exception:
+                await self._send(chat_id, status_text)
+        else:
+            await self._send(chat_id, status_text)
+
+        return True
+
     async def _process_text(self, update_id: int, chat_id: int, text: str) -> bool:
         """Build (once) and deliver the reply; False means acked but undelivered."""
         command = _parse_command(text)
@@ -186,6 +295,27 @@ class TelegramBot:
             attempts = self._turn_attempts.get(update_id, 0)
             try:
                 reply = await self._run_turn(update_id, text)
+            except ApprovalRequiredError as exc:
+                self._clear_pending(update_id)
+                reply_markup = {
+                    "inline_keyboard": [
+                        [
+                            {"text": "✅ Approve", "callback_data": f"appr:{exc.approval_id}:yes"},
+                            {"text": "❌ Reject", "callback_data": f"appr:{exc.approval_id}:no"},
+                        ]
+                    ]
+                }
+                msg_text = (
+                    f"⚠️ Approval requested for tool: {exc.tool_name}\n"
+                    f"Args: {json.dumps(exc.arguments)}"
+                )
+                await asyncio.to_thread(
+                    self.client.send_message,
+                    chat_id,
+                    msg_text,
+                    reply_markup=reply_markup,
+                )
+                return True
             except Exception:
                 attempts += 1
                 self._turn_attempts[update_id] = attempts
@@ -224,6 +354,12 @@ class TelegramBot:
         ):
             if event.type == "token":
                 parts.append(str(event.data.get("text") or ""))
+            elif event.type == "approval_required":
+                raise ApprovalRequiredError(
+                    event.data["approval_id"],
+                    event.data["tool_name"],
+                    event.data["arguments"],
+                )
             elif event.type == "error":
                 error = str(event.data.get("message") or "the agent failed")
 

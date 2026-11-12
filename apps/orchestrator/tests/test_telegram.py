@@ -33,11 +33,47 @@ class FakeTelegramClient:
 
     def __init__(self) -> None:
         self.sent: list[tuple[int, str]] = []
+        self.sent_messages: list[dict] = []
+        self.answered_callbacks: list[dict] = []
+        self.edited_messages: list[dict] = []
         self.offsets: list[int] = []
         self.updates: list[dict] = []
 
-    def send_message(self, chat_id: int, text: str) -> dict:
+    def send_message(
+        self, chat_id: int, text: str, *, reply_markup: dict | None = None, **kwargs
+    ) -> dict:
         self.sent.append((chat_id, text))
+        self.sent_messages.append(
+            {"chat_id": chat_id, "text": text, "reply_markup": reply_markup, **kwargs}
+        )
+        return {"ok": True}
+
+    def answer_callback_query(
+        self, callback_query_id: str, text: str | None = None, **kwargs
+    ) -> dict:
+        self.answered_callbacks.append(
+            {"callback_query_id": callback_query_id, "text": text, **kwargs}
+        )
+        return {"ok": True}
+
+    def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        reply_markup: dict | None = None,
+        **kwargs,
+    ) -> dict:
+        self.edited_messages.append(
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "reply_markup": reply_markup,
+                **kwargs,
+            }
+        )
         return {"ok": True}
 
     async def get_updates(self, offset: int, timeout: int = 50) -> list[dict]:

@@ -87,9 +87,53 @@ class TelegramClient:
         )
         return result if isinstance(result, list) else []
 
-    def send_message(self, chat_id: int, text: str) -> dict[str, Any]:
+    def send_message(
+        self,
+        chat_id: int,
+        text: str,
+        *,
+        reply_markup: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Send one message; callers split anything over 4096 characters."""
-        result = self._call("sendMessage", {"chat_id": chat_id, "text": text})
+        payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        result = self._call("sendMessage", payload)
+        return result if isinstance(result, dict) else {}
+
+    def answer_callback_query(
+        self,
+        callback_query_id: str,
+        text: str | None = None,
+        *,
+        show_alert: bool = False,
+    ) -> dict[str, Any]:
+        """Answer an incoming callback query from an inline keyboard button."""
+        payload: dict[str, Any] = {"callback_query_id": callback_query_id}
+        if text is not None:
+            payload["text"] = text
+        if show_alert:
+            payload["show_alert"] = show_alert
+        result = self._call("answerCallbackQuery", payload)
+        return result if isinstance(result, dict) else {}
+
+    def edit_message_text(
+        self,
+        chat_id: int,
+        message_id: int,
+        text: str,
+        *,
+        reply_markup: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Edit text of an existing message."""
+        payload: dict[str, Any] = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": text,
+        }
+        if reply_markup is not None:
+            payload["reply_markup"] = reply_markup
+        result = self._call("editMessageText", payload)
         return result if isinstance(result, dict) else {}
 
     # -- transport ------------------------------------------------------

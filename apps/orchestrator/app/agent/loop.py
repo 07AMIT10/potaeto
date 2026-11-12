@@ -26,6 +26,7 @@ from typing import Any, Literal
 
 from app.agent.context import DEFAULT_TOKEN_BUDGET, ContextBuilder
 from app.db.repositories.base import transaction
+from app.db.repositories.approvals import ApprovalRepo
 from app.db.repositories.conversations import ConversationRepo
 from app.db.repositories.messages import Message, MessageRepo
 from app.db.repositories.sync import SyncRepo
@@ -35,6 +36,7 @@ from app.memory.service import MemoryService
 from app.memory.tools import MemoryTools
 from app.providers.base import ChatMessage, ChatRequest, StreamEvent
 from app.tools.monitor import MonitorTools
+from app.tools.registry import ApprovalRequiredError, ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +50,9 @@ TOOL_RESULT_CHAR_CAP = 8_000
 TRUNCATED_MARKER = "… truncated"
 
 
-AgentEventType = Literal["token", "tool_call", "tool_result", "done", "error"]
+AgentEventType = Literal[
+    "token", "tool_call", "tool_result", "done", "error", "approval_required"
+]
 
 # Parameters the loop owns and therefore hides from the model. ``user_confirmed``
 # is deliberately included: only an authenticated UI/API may confirm a fact, so
@@ -80,6 +84,19 @@ class AgentEvent:
     @classmethod
     def done(cls, message_id: str) -> AgentEvent:
         return cls("done", {"message_id": message_id})
+
+    @classmethod
+    def approval_required(
+        cls, approval_id: str, tool_name: str, arguments: dict[str, Any]
+    ) -> AgentEvent:
+        return cls(
+            "approval_required",
+            {
+                "approval_id": approval_id,
+                "tool_name": tool_name,
+                "arguments": arguments,
+            },
+        )
 
     @classmethod
     def error(cls, code: str, message: str) -> AgentEvent:
@@ -211,7 +228,7 @@ class AgentLoop:
         db: sqlite3.Connection,
         provider: Any,
         memory: MemoryService | None = None,
-        tools: dict[str, Callable[..., Any]] | None = None,
+        tools: dict[str, Callable[..., Any]] | ToolRegistry | None = None,
         *,
         model: str = DEFAULT_MODEL,
         queue: TurnQueue | None = None,
@@ -219,23 +236,36 @@ class AgentLoop:
         max_tokens: int | None = None,
         context_budget: int | None = None,
         memory_scope: str = "global",
+        approval_repo: ApprovalRepo | None = None,
     ) -> None:
         self.db = db
         self.provider = provider
         self.memory = memory if memory is not None else MemoryService(db)
+        self.approval_repo = (
+            approval_repo if approval_repo is not None else ApprovalRepo(db)
+        )
         # The scope must be known before the tools are built: a bare
         # ``memory_search`` call must see the same project nodes as context.
         self.memory_scope = memory_scope
-        if tools is None:
-            # Memory governance plus the read-only host/network monitors. The
-            # monitor's blocking HTTP call is moved off the event loop by
-            # ``_execute_tool``.
-            self.tools = {
-                **MemoryTools(db, default_scope=self.memory_scope).as_tool_map(),
-                **MonitorTools(db).as_tool_map(),
-            }
+        if isinstance(tools, ToolRegistry):
+            self.registry = tools
+            if self.registry.approval_repo is None:
+                self.registry.approval_repo = self.approval_repo
+            self.tools = self.registry.as_tool_map()
         else:
-            self.tools = dict(tools)
+            if tools is None:
+                # Memory governance plus the read-only host/network monitors. The
+                # monitor's blocking HTTP call is moved off the event loop by
+                # ``_execute_tool``.
+                self.tools = {
+                    **MemoryTools(db, default_scope=self.memory_scope).as_tool_map(),
+                    **MonitorTools(db).as_tool_map(),
+                }
+            else:
+                self.tools = dict(tools)
+            self.registry = ToolRegistry.from_tool_map(
+                self.tools, approval_repo=self.approval_repo
+            )
         self.model = model
         # A cap must be sent explicitly: OpenRouter interprets a missing
         # ``max_tokens`` as the model maximum and can reject the request.
@@ -405,16 +435,24 @@ class AgentLoop:
 
             if tool_calls and turn < MAX_TOOL_TURNS:
                 chat_messages.append(self._assistant_tool_message(tool_calls))
+                approval_interrupted = False
                 for call in tool_calls:
                     yield AgentEvent.tool_call(call["id"], call["name"], call["arguments"])
-                    result = await self._execute_tool(
-                        call["name"],
-                        call["arguments"],
-                        user_id=user_id,
-                        entity_id=entity_id,
-                        conversation_id=conversation_id,
-                        message_id=user_message_row.id,
-                    )
+                    try:
+                        result = await self._execute_tool(
+                            call["name"],
+                            call["arguments"],
+                            user_id=user_id,
+                            entity_id=entity_id,
+                            conversation_id=conversation_id,
+                            message_id=user_message_row.id,
+                        )
+                    except ApprovalRequiredError as exc:
+                        yield AgentEvent.approval_required(
+                            exc.approval_id, exc.tool_name, exc.arguments
+                        )
+                        approval_interrupted = True
+                        break
                     yield AgentEvent.tool_result(call["id"], call["name"], result)
                     chat_messages.append(
                         ChatMessage(
@@ -429,6 +467,9 @@ class AgentLoop:
                     chat_messages = self._fit_messages(
                         chat_messages, self._char_budget()
                     )
+                if approval_interrupted:
+                    self._record_usage(usage_totals, started, success=True)
+                    return
                 continue
 
             final_text = "".join(turn_text)
@@ -630,16 +671,47 @@ class AgentLoop:
         error_code: str | None = "cancelled"
         result: Any = {"error": "cancelled", "message": f"tool {name!r} was cancelled"}
         try:
-            fn = self.tools.get(name)
-            if fn is None:
-                result = {"error": "unknown_tool", "message": f"unknown tool {name!r}"}
-                status, error_code = "failed", "unknown_tool"
-                return result
             context = {
                 "user_id": user_id,
                 "entity_id": entity_id,
                 "conversation_id": conversation_id,
             }
+            if hasattr(self, "registry") and self.registry and name in self.registry:
+                try:
+                    result = await asyncio.to_thread(
+                        self.registry.execute,
+                        name,
+                        arguments,
+                        **context,
+                    )
+                except ApprovalRequiredError as exc:
+                    status = "pending_approval"
+                    error_code = "approval_required"
+                    if audit_id is not None:
+                        try:
+                            self.tool_calls.update(
+                                audit_id,
+                                status="pending_approval",
+                                approval_id=exc.approval_id,
+                                error_code="approval_required",
+                            )
+                        except Exception:
+                            logger.exception(
+                                "failed to record pending approval for %s", audit_id
+                            )
+                    raise
+                except Exception as exc:  # noqa: BLE001 - a tool error is a structured result
+                    result = {"error": type(exc).__name__, "message": str(exc)}
+                    status, error_code = "failed", type(exc).__name__
+                    return result
+                status, error_code = "succeeded", None
+                return _normalize_result(result)
+
+            fn = self.tools.get(name)
+            if fn is None:
+                result = {"error": "unknown_tool", "message": f"unknown tool {name!r}"}
+                status, error_code = "failed", "unknown_tool"
+                return result
             try:
                 # Tools are synchronous callables and some (``http_ping``) block
                 # on network I/O. Run them in the threadpool so a slow monitor
@@ -648,6 +720,22 @@ class AgentLoop:
                 result = await asyncio.to_thread(
                     _call_with_context, fn, arguments, context
                 )
+            except ApprovalRequiredError as exc:
+                status = "pending_approval"
+                error_code = "approval_required"
+                if audit_id is not None:
+                    try:
+                        self.tool_calls.update(
+                            audit_id,
+                            status="pending_approval",
+                            approval_id=exc.approval_id,
+                            error_code="approval_required",
+                        )
+                    except Exception:
+                        logger.exception(
+                            "failed to record pending approval for %s", audit_id
+                        )
+                raise
             except Exception as exc:  # noqa: BLE001 - a tool error is a structured result
                 result = {"error": type(exc).__name__, "message": str(exc)}
                 status, error_code = "failed", type(exc).__name__
@@ -690,6 +778,8 @@ class AgentLoop:
         error_code: str | None = None,
     ) -> None:
         if audit_id is None:
+            return
+        if status == "pending_approval":
             return
         try:
             self.tool_calls.finish(
