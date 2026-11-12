@@ -5,9 +5,14 @@ export default function HomePage() {
     <main className="min-h-screen flex flex-col">
       <nav className="flex items-center justify-between px-6 py-4 max-w-5xl mx-auto w-full">
         <span className="text-xl font-bold text-potato-600">Potaeto</span>
-        <Link href="/pair" className="btn-ghost text-potato-600">
-          Pair device
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/hardware" className="btn-ghost text-potato-600">
+            Hardware
+          </Link>
+          <Link href="/pair" className="btn-ghost text-potato-600">
+            Pair device
+          </Link>
+        </div>
       </nav>
 
       <div className="flex-1 flex flex-col items-center justify-center px-6 pb-20">
@@ -37,10 +42,11 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 max-w-lg mx-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-8 max-w-xl mx-auto">
             {[
               { icon: '💬', label: 'Chat', href: '/chat' },
               { icon: '🧠', label: 'Memory', href: '/memory' },
+              { icon: '🔌', label: 'Hardware', href: '/hardware' },
               { icon: '⏰', label: 'Schedules', href: null },
               { icon: '📈', label: 'Monitor', href: null },
             ].map((f) => {
