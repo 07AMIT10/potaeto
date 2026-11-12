@@ -27,6 +27,7 @@ from croniter import croniter  # type: ignore
 
 from app.db.repositories.base import dump_json, new_id
 from app.db.repositories.jobs import Job, JobRepo
+from app.workflows.engine import WorkflowEngine
 
 logger = logging.getLogger(__name__)
 
@@ -206,14 +207,26 @@ class Scheduler:
 class JobRunner:
     """Execute due jobs one at a time, under the scheduler's lease.
 
-    Steps are intentionally small: Release 1 needs ``notify`` and ``noop``;
-    anything else completes the job as ``error`` so the failure is visible in
-    ``job_runs`` instead of silently stalling the lease.
+    Executes jobs via WorkflowEngine to run full step pipelines under durable
+    governance, recording status and output in ``job_runs``.
     """
 
-    def __init__(self, scheduler: Scheduler, notify: Notify | None = None) -> None:
+    def __init__(
+        self,
+        scheduler: Scheduler,
+        notify: Notify | None = None,
+        *,
+        engine: WorkflowEngine | None = None,
+        registry: Any = None,
+        provider: Any = None,
+        telegram_bot: Any = None,
+    ) -> None:
         self.scheduler = scheduler
         self.notify = notify
+        self.engine = engine
+        self.registry = registry
+        self.provider = provider
+        self.telegram_bot = telegram_bot or notify
 
     async def run_once(self, now: datetime | str | None = None) -> list[Job]:
         """Lease and execute every job due at `now`; return the completed jobs."""
@@ -249,35 +262,12 @@ class JobRunner:
         if not isinstance(steps, list):
             return "error", {"error": "'steps' must be a list", "steps": []}
 
-        results: list[dict[str, Any]] = []
-        for index, step in enumerate(steps):
-            if not isinstance(step, dict):
-                return "error", {
-                    "error": f"step {index} is not an object",
-                    "steps": results,
-                }
-            kind = step.get("type")
-            if kind == "noop":
-                results.append({"type": "noop"})
-                continue
-            if kind != "notify":
-                return "error", {
-                    "error": f"step {index}: unknown step type {kind!r}",
-                    "steps": results,
-                }
-            text = step.get("text")
-            if not isinstance(text, str) or not text.strip():
-                return "error", {
-                    "error": f"step {index}: notify requires non-empty 'text'",
-                    "steps": results,
-                }
-            if self.notify is not None:
-                try:
-                    await self.notify(text)
-                except Exception as exc:  # noqa: BLE001 - record, don't wedge
-                    return "error", {
-                        "error": f"step {index}: notify failed: {exc}",
-                        "steps": results,
-                    }
-            results.append({"type": "notify", "text": text})
-        return "success", {"steps": results}
+        engine = self.engine or WorkflowEngine(
+            registry=self.registry,
+            db_conn=self.scheduler.db,
+            provider=self.provider,
+            telegram_bot=self.telegram_bot or self.notify,
+        )
+        res = await engine.execute_workflow(steps)
+        status = "success" if res["status"] == "completed" else "error"
+        return status, res
