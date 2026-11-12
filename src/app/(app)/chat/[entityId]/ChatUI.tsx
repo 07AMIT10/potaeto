@@ -10,6 +10,7 @@ import { MoodTimeline } from '@/components/MoodTimeline';
 import { ChatSearch } from '@/components/ChatSearch';
 import { ChatExport } from '@/components/ChatExport';
 import { ModelPicker } from '@/components/ModelPicker';
+import { ApprovalModal } from '@/components/chat/ApprovalModal';
 import { playMessageSend, playMessageReceive, playReaction, isSoundEnabled, setSoundEnabled } from '@/lib/chat/sounds';
 import type { AvatarTemplateId } from '@/lib/avatar/template';
 
@@ -64,6 +65,53 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   // banner lets the user retry the turn after reconnecting instead of leaving
   // a silent gap (a full offline agent turn is out of scope for Release 1).
   const [awaitingReply, setAwaitingReply] = useState<{ text: string; clientMessageId: string } | null>(null);
+  const [activeApproval, setActiveApproval] = useState<{
+    id: string;
+    tool_name: string;
+    arguments: Record<string, unknown>;
+    expires_at?: number;
+  } | null>(null);
+  const [approvalLoading, setApprovalLoading] = useState(false);
+
+  // Check for any pending unexpired approvals on load or reconnect
+  useEffect(() => {
+    if (!online || typeof client.getPendingApprovals !== 'function') return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const pending = await client.getPendingApprovals();
+        if (cancelled) return;
+        if (pending && pending.length > 0) {
+          const first = pending[0];
+          setActiveApproval({
+            id: first.id,
+            tool_name: first.tool_name,
+            arguments: first.arguments,
+            expires_at: first.expires_at,
+          });
+        }
+      } catch {
+        // Core offline or unauthenticated
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [client, online]);
+
+  const handleResolveApproval = useCallback(
+    async (decision: 'approved' | 'rejected') => {
+      if (!activeApproval) return;
+      setApprovalLoading(true);
+      try {
+        await client.resolveApproval(activeApproval.id, decision);
+        setActiveApproval(null);
+      } finally {
+        setApprovalLoading(false);
+      }
+    },
+    [client, activeApproval]
+  );
 
   // -----------------------------------------------------------------------
   // Load history from the local IndexedDB cache
@@ -144,6 +192,17 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
               const last = next[next.length - 1];
               if (last.role === 'model') next[next.length - 1] = { ...last, parts: full };
               return next;
+            });
+          } else if (event.type === 'approval_required' || event.type === 'tool_approval_required') {
+            const approvalId = String(event.data.approval_id ?? event.data.id ?? '');
+            const toolName = String(event.data.tool_name ?? '');
+            const args = (event.data.arguments as Record<string, unknown>) ?? {};
+            const expiresAt = typeof event.data.expires_at === 'number' ? event.data.expires_at : undefined;
+            setActiveApproval({
+              id: approvalId,
+              tool_name: toolName,
+              arguments: args,
+              expires_at: expiresAt,
             });
           } else if (event.type === 'done') {
             assistantId = typeof event.data.message_id === 'string' ? event.data.message_id : null;
@@ -291,69 +350,86 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   // Render
   // -----------------------------------------------------------------------
   return (
-    <ChatBase
-      messages={messages}
-      entityName={entityName}
-      avatarTemplate={avatarTemplate}
-      loading={loading}
-      streaming={streaming}
-      initialLoading={initialLoading}
-      latestChunkLength={latestChunkLength}
-      input={input}
-      onInputChange={setInput}
-      onSend={send}
-      onReaction={handleReaction}
-      onRegenerate={regenerate}
-      headerContent={
-        <div className="flex items-center justify-end gap-1 px-4 pt-2">
-          <Link
-            href="/memory"
-            className="btn-ghost p-2 text-[var(--muted)] hover:text-potato-600 transition-colors"
-            title="Memory governance"
-            aria-label="Memory governance"
-          >
-            🧠
-          </Link>
-          <ModelPicker />
-          <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
-          <ChatExport messages={messages} entityName={entityName} />
-          <SoundToggle />
-        </div>
-      }
-      aboveMessages={
-        <MoodTimeline messages={messages} onClickMessage={scrollToMessage} />
-      }
-      aboveInput={
-        <>
-          {awaitingReply && (
-            <div
-              role="status"
-              className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+    <>
+      <ChatBase
+        messages={messages}
+        entityName={entityName}
+        avatarTemplate={avatarTemplate}
+        loading={loading}
+        streaming={streaming}
+        initialLoading={initialLoading}
+        latestChunkLength={latestChunkLength}
+        input={input}
+        onInputChange={setInput}
+        onSend={send}
+        onReaction={handleReaction}
+        onRegenerate={regenerate}
+        headerContent={
+          <div className="flex items-center justify-end gap-1 px-4 pt-2">
+            <Link
+              href="/memory"
+              className="btn-ghost p-2 text-[var(--muted)] hover:text-potato-600 transition-colors"
+              title="Memory governance"
+              aria-label="Memory governance"
             >
-              <span>
-                {online
-                  ? 'Sent — awaiting reply.'
-                  : 'Saved offline — will send when you reconnect.'}
-              </span>
-              <button
-                type="button"
-                onClick={retryAwaitingReply}
-                disabled={loading}
-                className="btn-ghost shrink-0 px-2 py-1 text-xs"
+              🧠
+            </Link>
+            <Link
+              href="/hardware"
+              className="btn-ghost p-2 text-[var(--muted)] hover:text-potato-600 transition-colors"
+              title="Hardware & Sensors"
+              aria-label="Hardware & Sensors"
+            >
+              🔌
+            </Link>
+            <ModelPicker />
+            <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
+            <ChatExport messages={messages} entityName={entityName} />
+            <SoundToggle />
+          </div>
+        }
+        aboveMessages={
+          <MoodTimeline messages={messages} onClickMessage={scrollToMessage} />
+        }
+        aboveInput={
+          <>
+            {awaitingReply && (
+              <div
+                role="status"
+                className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
               >
-                Retry
-              </button>
-            </div>
-          )}
-          {!loading && latestAssistantText ? (
-            <QuickReplies
-              latestAssistantText={latestAssistantText}
-              onSelect={handleQuickReply}
-              disabled={loading}
-            />
-          ) : null}
-        </>
-      }
-    />
+                <span>
+                  {online
+                    ? 'Sent — awaiting reply.'
+                    : 'Saved offline — will send when you reconnect.'}
+                </span>
+                <button
+                  type="button"
+                  onClick={retryAwaitingReply}
+                  disabled={loading}
+                  className="btn-ghost shrink-0 px-2 py-1 text-xs"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {!loading && latestAssistantText ? (
+              <QuickReplies
+                latestAssistantText={latestAssistantText}
+                onSelect={handleQuickReply}
+                disabled={loading}
+              />
+            ) : null}
+          </>
+        }
+      />
+      {activeApproval && (
+        <ApprovalModal
+          approval={activeApproval}
+          loading={approvalLoading}
+          onResolve={handleResolveApproval}
+        />
+      )}
+    </>
   );
 }

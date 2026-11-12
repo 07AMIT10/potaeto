@@ -6,7 +6,7 @@
  * wire shapes emitted by the FastAPI core (see `apps/orchestrator/app/api/`).
  */
 
-export type AgentEventType = 'token' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'approval_required';
+export type AgentEventType = 'token' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'approval_required' | 'tool_approval_required';
 
 export interface AgentEvent {
   type: AgentEventType;
@@ -133,3 +133,14 @@ export interface MemoryItem {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface TelemetryData {
+  connected: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  pressure: number | null;
+  light: number | null;
+  accelerometer: [number, number, number] | number[] | null;
+  ok?: boolean;
+}
+

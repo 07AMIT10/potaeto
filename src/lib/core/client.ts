@@ -23,6 +23,7 @@ import type {
   PushResult,
   PushStatus,
   SyncResponse,
+  TelemetryData,
 } from './types';
 
 export interface CoreClientOptions {
@@ -100,6 +101,15 @@ interface WireMemoryItem {
 }
 interface WireMemoryListResponse {
   memories: WireMemoryItem[];
+}
+interface WireTelemetryResponse {
+  connected: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  pressure: number | null;
+  light: number | null;
+  accelerometer: [number, number, number] | number[] | null;
+  ok?: boolean;
 }
 
 function normalizeMemory(m: WireMemoryItem): MemoryItem {
@@ -201,36 +211,63 @@ export class CoreClient {
     });
   }
 
+  async fetch(path: string, init?: RequestInit): Promise<Response> {
+    return fetch(`${this.baseUrl}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    });
+  }
+
   /** Resolve a pending tool-call approval. */
   async resolveApproval(
     approvalId: string,
     decision: 'approved' | 'rejected'
-  ): Promise<{ id: string; status: string; [key: string]: unknown }> {
-    const response = await fetch(
-      `${this.baseUrl}/v1/approvals/${encodeURIComponent(approvalId)}/resolve`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ decision }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(`Failed to resolve approval: ${response.statusText}`);
+  ): Promise<ApprovalRequest> {
+    const res = await this.fetch(`/v1/approvals/${approvalId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ decision }),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to resolve approval: ${res.statusText}`);
     }
-    return response.json();
+    return res.json();
   }
 
   /** Fetch pending unexpired tool-call approvals. */
-  async getPendingApprovals(): Promise<any[]> {
-    const response = await fetch(`${this.baseUrl}/v1/approvals/pending`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch approvals: ${response.statusText}`);
+  async getPendingApprovals(): Promise<ApprovalRequest[]> {
+    const res = await this.fetch('/v1/approvals/pending');
+    if (!res.ok) {
+      throw new Error(`Failed to fetch approvals: ${res.statusText}`);
     }
-    return response.json();
+    return res.json();
+  }
+
+  /** Fetch the latest sensor telemetry readings from Arduino. */
+  async getTelemetry(): Promise<TelemetryData> {
+    const res = await this.requestJson<WireTelemetryResponse>('/v1/hardware/telemetry');
+    return {
+      connected: Boolean(res.connected),
+      temperature: res.temperature ?? null,
+      humidity: res.humidity ?? null,
+      pressure: res.pressure ?? null,
+      light: res.light ?? null,
+      accelerometer: res.accelerometer ?? null,
+      ok: res.ok ?? true,
+    };
+  }
+
+  /** Set the onboard RGB LED color and optional pattern (solid, breathe, blink). */
+  async setLedColor(
+    r: number,
+    g: number,
+    b: number,
+    pattern: string = 'solid',
+  ): Promise<{ ok: boolean; error?: string }> {
+    return this.requestJson<{ ok: boolean; error?: string }>('/v1/hardware/led', {
+      method: 'POST',
+      body: JSON.stringify({ r, g, b, pattern }),
+    });
   }
 
   /** Pull the change log after the device cursor. */
