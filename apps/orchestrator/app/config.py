@@ -87,6 +87,8 @@ class Settings:
     #: Per-caller request budgets, both over a 60-second window.
     rate_limit_pair_per_min: int = 10
     rate_limit_chat_per_min: int = 30
+    #: Path to standalone Lens MCP sidecar binary (or empty for auto-detect).
+    lens_mcp_path: str = ""
     opencode: OpenCodeSettings = field(default_factory=OpenCodeSettings)
     openrouter: OpenRouterSettings = field(default_factory=OpenRouterSettings)
     telegram: TelegramSettings = field(default_factory=TelegramSettings)
@@ -110,6 +112,7 @@ def get_settings() -> Settings:
         smoke_provider=_env_bool("POTAETO_SMOKE_PROVIDER"),
         rate_limit_pair_per_min=_env_int("RATE_LIMIT_PAIR_PER_MIN", 10),
         rate_limit_chat_per_min=_env_int("RATE_LIMIT_CHAT_PER_MIN", 30),
+        lens_mcp_path=_env_str("LENS_MCP_PATH", default=""),
         opencode=OpenCodeSettings(
             api_key=_env_str("OPENCODE_API_KEY", "OPENCODE_GO_API_KEY"),
             base_url=_env_str("OPENCODE_BASE_URL"),

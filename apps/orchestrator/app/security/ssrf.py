@@ -211,6 +211,15 @@ def validate_url(url: str, *, resolver: Resolver | None = None) -> str:
     return host
 
 
+def is_safe_url(url: str, *, resolver: Resolver | None = None) -> bool:
+    """Return True if `url` is an allowed HTTP(S) URL with a public destination."""
+    try:
+        validate_url(url, resolver=resolver)
+        return True
+    except (SSRFError, ValueError):
+        return False
+
+
 class SSRFSafeFetcher:
     """Fetch a URL with destination checks, redirect limits, and size/time caps."""
 

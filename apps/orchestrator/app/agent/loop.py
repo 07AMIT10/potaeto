@@ -35,6 +35,7 @@ from app.db.repositories.usage import UsageRepo, normalize_usage
 from app.memory.service import MemoryService
 from app.memory.tools import MemoryTools
 from app.providers.base import ChatMessage, ChatRequest, StreamEvent
+from app.tools.lens_mcp import LensResearchTools
 from app.tools.monitor import MonitorTools
 from app.tools.registry import ApprovalRequiredError, ToolRegistry
 
@@ -260,6 +261,7 @@ class AgentLoop:
                 self.tools = {
                     **MemoryTools(db, default_scope=self.memory_scope).as_tool_map(),
                     **MonitorTools(db).as_tool_map(),
+                    **LensResearchTools().as_tool_map(),
                 }
             else:
                 self.tools = dict(tools)
@@ -678,12 +680,22 @@ class AgentLoop:
             }
             if hasattr(self, "registry") and self.registry and name in self.registry:
                 try:
-                    result = await asyncio.to_thread(
-                        self.registry.execute,
-                        name,
-                        arguments,
-                        **context,
-                    )
+                    tool_def = self.registry.get(name)
+                    if tool_def and inspect.iscoroutinefunction(tool_def.handler):
+                        result = await self.registry.execute_async(
+                            name,
+                            arguments,
+                            **context,
+                        )
+                    else:
+                        result = await asyncio.to_thread(
+                            self.registry.execute,
+                            name,
+                            arguments,
+                            **context,
+                        )
+                        if inspect.isawaitable(result):
+                            result = await result
                 except ApprovalRequiredError as exc:
                     status = "pending_approval"
                     error_code = "approval_required"
@@ -717,9 +729,14 @@ class AgentLoop:
                 # on network I/O. Run them in the threadpool so a slow monitor
                 # never stalls the SSE stream; the DB write lock serializes
                 # memory writes.
-                result = await asyncio.to_thread(
-                    _call_with_context, fn, arguments, context
-                )
+                if inspect.iscoroutinefunction(fn):
+                    result = await _call_with_context(fn, arguments, context)
+                else:
+                    result = await asyncio.to_thread(
+                        _call_with_context, fn, arguments, context
+                    )
+                    if inspect.isawaitable(result):
+                        result = await result
             except ApprovalRequiredError as exc:
                 status = "pending_approval"
                 error_code = "approval_required"

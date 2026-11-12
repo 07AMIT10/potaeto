@@ -6,6 +6,7 @@ from app.security.ssrf import (
     SSRFError,
     SSRFSafeFetcher,
     is_blocked_ip,
+    is_safe_url,
     redact_url,
     validate_url,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "SSRFError",
     "SSRFSafeFetcher",
     "is_blocked_ip",
+    "is_safe_url",
     "redact_url",
     "validate_url",
 ]

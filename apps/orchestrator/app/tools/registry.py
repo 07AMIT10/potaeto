@@ -113,19 +113,13 @@ class ToolRegistry:
             registry.register(fn, name=name)
         return registry
 
-    def execute(
+    def _prepare_call(
         self,
         tool_name: str,
         arguments: dict[str, Any],
         user_id: str | None = None,
         **extra: Any,
-    ) -> Any:
-        """Execute a tool with approval check.
-
-        If the tool requires approval and no unexpired approved record exists,
-        an approval request is created in ApprovalRepo (if configured) and
-        ApprovalRequiredError is raised.
-        """
+    ) -> tuple[Callable[..., Any], dict[str, Any]]:
         tool = self._tools.get(tool_name)
         if tool is None:
             raise KeyError(f"Tool {tool_name!r} not found in registry")
@@ -161,4 +155,42 @@ class ToolRegistry:
         if not accepts_kwargs:
             kwargs = {k: v for k, v in kwargs.items() if k in params}
 
-        return tool.handler(**kwargs)
+        return tool.handler, kwargs
+
+    def execute(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        user_id: str | None = None,
+        **extra: Any,
+    ) -> Any:
+        """Execute a tool with approval check.
+
+        If the tool requires approval and no unexpired approved record exists,
+        an approval request is created in ApprovalRepo (if configured) and
+        ApprovalRequiredError is raised.
+        """
+        handler, kwargs = self._prepare_call(tool_name, arguments, user_id=user_id, **extra)
+        return handler(**kwargs)
+
+    async def execute_async(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        user_id: str | None = None,
+        **extra: Any,
+    ) -> Any:
+        """Execute a tool asynchronously, awaiting if the handler returns an awaitable."""
+        handler, kwargs = self._prepare_call(tool_name, arguments, user_id=user_id, **extra)
+        result = handler(**kwargs)
+        if inspect.isawaitable(result):
+            return await result
+        return result
+
+    def register_lens_tools(self, tools: Any = None) -> None:
+        """Register Lens research tools into this registry."""
+        if tools is None:
+            from app.tools.lens_mcp import LensResearchTools
+
+            tools = LensResearchTools()
+        tools.register_tools(self)
