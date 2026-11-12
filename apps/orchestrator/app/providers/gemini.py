@@ -7,7 +7,7 @@ from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
 
 from .base import Provider, TextRequest, TextResponse
-from app.config import get_settings
+from app.config import get_app_settings
 
 
 def _build_contents(messages: list) -> list[dict[str, Any]]:
@@ -25,7 +25,7 @@ class GeminiProvider(Provider):
     name = "gemini"
 
     def __init__(self) -> None:
-        settings = get_settings()
+        settings = get_app_settings()
         if not settings.gemini.api_key:
             raise RuntimeError("Gemini API key not configured for orchestrator")
         self._client = genai.Client(api_key=settings.gemini.api_key)

@@ -1,4 +1,10 @@
-# Deploying Potaeto on Render
+# Deploying Potaeto on Render — SUPERSEDED
+
+> **Superseded.** Release 1 deploys to a self-hosted Linux host with systemd + Caddy + optional
+> Cloudflare Tunnel, not Render, and uses SQLite instead of Supabase. Use
+> [`deploy/README.md`](deploy/README.md). This file and `render.yaml` are kept
+> only as historical context for the retired hosted deployment; do not follow
+> them for a Release 1 install.
 
 This app has **two deployable parts**:
 
@@ -67,7 +73,7 @@ Both can be deployed on Render using the included `render.yaml` blueprint.
 - **Dockerfile path**: `apps/orchestrator/Dockerfile`
 - **Docker context**: `apps/orchestrator`
 - **Health check path**: `/v1/health`
-- **Env**: `GOOGLE_GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (required for `models_config`).
+- **Env**: `GOOGLE_GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (required for `models_config`). For scheduled jobs, also set `POTAETO_SCHEDULER_ENABLED=1`, `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_ALLOWED_CHAT_IDS`.
 
 ### 2. Next.js (Node)
 
@@ -82,11 +88,16 @@ Both can be deployed on Render using the included `render.yaml` blueprint.
 
 ## Post-deploy
 
+- **Scheduled jobs**: create jobs with `POST /v1/jobs` (device auth required). The
+  orchestrator executes them only when `POTAETO_SCHEDULER_ENABLED=1`; `notify`
+  steps are delivered to every comma-separated `TELEGRAM_ALLOWED_CHAT_IDS`
+  entry, which also requires `TELEGRAM_BOT_TOKEN`. Without the flag, jobs are
+  stored but never fire. The runner polls every 30 seconds and Telegram messages
+  are split at 4096 UTF-16 units.
 - **Proactive messaging**: Call `POST https://<your-web-url>/api/proactive/trigger` with header `X-Admin-Secret: <ADMIN_SECRET>` from a cron (e.g. Render Cron Job, or external scheduler). See README “Proactive messaging”.
-- **Admin**: Open `https://<your-web-url>/admin` and sign in with admin credentials. By default:
-  - Username: `admin`
-  - Password: `change-me`
-  You can still use `X-Admin-Secret` for API-only admin access.
+- **Admin**: Release 1 has **no default admin credentials** and no admin UI.
+  `/v1/admin/*` is fail-closed: it returns 503 unless `ADMIN_SECRET` is set and
+  the caller supplies the matching header.
 
 ---
 

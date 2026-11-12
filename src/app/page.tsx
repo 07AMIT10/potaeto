@@ -5,11 +5,8 @@ export default function HomePage() {
     <main className="min-h-screen flex flex-col">
       <nav className="flex items-center justify-between px-6 py-4 max-w-5xl mx-auto w-full">
         <span className="text-xl font-bold text-potato-600">Potaeto</span>
-        <Link
-          href="/login"
-          className="btn-ghost text-potato-600"
-        >
-          Log in
+        <Link href="/pair" className="btn-ghost text-potato-600">
+          Pair device
         </Link>
       </nav>
 
@@ -21,30 +18,31 @@ export default function HomePage() {
           </div>
 
           <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-balance leading-[1.1]">
-            Build your own
-            <span className="text-potato-500 block">characters & personas</span>
+            One agent.
+            <span className="text-potato-500 block">Always on.</span>
           </h1>
 
           <p className="text-lg text-[var(--muted)] max-w-lg mx-auto text-balance leading-relaxed">
-            Describe who you want to create using text or voice. Chat with them,
-            generate content, and share with the world.
+            Potaeto remembers what matters, runs on your own machine, and is
+            reachable from the browser or Telegram. Pair this device to start
+            chatting.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <Link href="/onboarding" className="btn-primary text-base px-8 py-3">
-              Continue as guest
+            <Link href="/pair" className="btn-primary text-base px-8 py-3">
+              Pair this device
             </Link>
-            <Link href="/login" className="btn-secondary text-base px-8 py-3">
-              Log in / sign up
+            <Link href="/chat" className="btn-secondary text-base px-8 py-3">
+              Open chat
             </Link>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 max-w-lg mx-auto">
             {[
               { icon: '💬', label: 'Chat' },
-              { icon: '🎨', label: 'Generate' },
-              { icon: '🎤', label: 'Voice' },
-              { icon: '🔗', label: 'Share' },
+              { icon: '🧠', label: 'Memory' },
+              { icon: '⏰', label: 'Schedules' },
+              { icon: '📈', label: 'Monitor' },
             ].map((f) => (
               <div key={f.label} className="card p-3 text-center">
                 <span className="text-2xl block mb-1">{f.icon}</span>
@@ -56,7 +54,7 @@ export default function HomePage() {
       </div>
 
       <footer className="text-center py-6 text-xs text-[var(--muted)]">
-        Built with Next.js, Supabase & Gemini
+        Potaeto Release 1 — one persona, one shared conversation
       </footer>
     </main>
   );

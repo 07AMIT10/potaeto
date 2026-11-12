@@ -1,0 +1,22 @@
+# Potaeto edge: serve the static PWA and proxy the core API.
+#
+# The core binds 127.0.0.1:8010 and is never exposed directly; port 8000 on
+# the agent host belongs to another service. Caddy is the only trusted loopback proxy, so
+# the core accepts X-Forwarded-For / CF-Connecting-IP from it (see
+# deploy/README.md for the tunnel trust caveat).
+:8080 {
+	# API: preserve the path and all request headers. reverse_proxy forwards
+	# CF-Connecting-IP unchanged and appends the immediate peer to
+	# X-Forwarded-For itself; do not overwrite either header here.
+	handle /v1/* {
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	# Static Next.js export. Try the exact file, the pretty-URL .html file, a
+	# directory index, then the SPA/PWA shell.
+	handle {
+		root * /opt/potaeto/out
+		try_files {path} {path}.html {path}/index.html /index.html
+		file_server
+	}
+}

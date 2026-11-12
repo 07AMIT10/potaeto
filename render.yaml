@@ -1,6 +1,8 @@
-# Render Blueprint — deploy Next.js (web) + orchestrator (Docker).
-# Connect this repo in Render Dashboard; it auto-detects render.yaml.
-# Set all env vars in Render Dashboard or Environment Groups (sync: false = you set them manually).
+# SUPERSEDED — historical Render Blueprint only.
+#
+# Release 1 deploys to a self-hosted Linux host with systemd + Caddy (see deploy/README.md) and
+# uses SQLite, not Supabase. This file is not used by any Release 1 workflow and
+# must not be treated as a deployment guide.
 
 services:
   # Next.js frontend
@@ -49,6 +51,13 @@ services:
         sync: false
       # Required for reading models_config (RLS is admin-only)
       - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Scheduled jobs (/v1/jobs). Notify steps need the Telegram vars below.
+      - key: POTAETO_SCHEDULER_ENABLED
+        value: "1"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_ALLOWED_CHAT_IDS
         sync: false
       # Optional providers
       - key: GROQ_API_KEY

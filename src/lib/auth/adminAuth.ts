@@ -3,11 +3,14 @@ import { cookies } from 'next/headers';
 
 const ADMIN_SESSION_COOKIE = 'admin_session';
 const DEFAULT_ADMIN_USERNAME = 'admin';
-const DEFAULT_ADMIN_PASSWORD = 'change-me';
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 
 function getSessionSecret(): string {
-  return process.env.ADMIN_SESSION_SECRET ?? process.env.ADMIN_SECRET ?? 'change-me';
+  const secret = process.env.ADMIN_SESSION_SECRET ?? process.env.ADMIN_SECRET;
+  if (!secret) {
+    throw new Error('ADMIN_SESSION_SECRET or ADMIN_SECRET must be set');
+  }
+  return secret;
 }
 
 function sign(raw: string): string {
@@ -18,8 +21,8 @@ function getExpectedUsername(): string {
   return process.env.ADMIN_USERNAME ?? DEFAULT_ADMIN_USERNAME;
 }
 
-function getExpectedPassword(): string {
-  return process.env.ADMIN_PASSWORD ?? DEFAULT_ADMIN_PASSWORD;
+function getExpectedPassword(): string | null {
+  return process.env.ADMIN_PASSWORD ?? null;
 }
 
 function parseSession(value: string | undefined): { user: string; expiresAt: number; signature: string } | null {
@@ -72,7 +75,9 @@ export async function isAdminSessionValid(): Promise<boolean> {
 }
 
 export function validateAdminCredentials(username: string, password: string): boolean {
-  return username === getExpectedUsername() && password === getExpectedPassword();
+  const expectedPassword = getExpectedPassword();
+  if (!expectedPassword) return false;
+  return username === getExpectedUsername() && password === expectedPassword;
 }
 
 export async function isAdminRequestAuthorized(request: Request): Promise<boolean> {

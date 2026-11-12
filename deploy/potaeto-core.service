@@ -1,0 +1,40 @@
+[Unit]
+Description=Potaeto core (FastAPI on 127.0.0.1:8010)
+Documentation=file:/opt/potaeto/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=potaeto
+Group=potaeto
+WorkingDirectory=/opt/potaeto/apps/orchestrator
+EnvironmentFile=/opt/potaeto/.env
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/opt/potaeto/apps/orchestrator/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
+Restart=on-failure
+RestartSec=3
+
+# Cgroup limits: leave headroom for the rest of the 8 GB box.
+MemoryMax=512M
+CPUQuota=200%
+Nice=5
+
+# Hardening. The core is reachable only through Caddy on loopback; only the
+# SQLite data directory and the agent-memory git tree are writable.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# Replace `operator` with the account that owns the agent-memory tree.
+ReadWritePaths=/opt/potaeto/data /home/operator/agent-memory
+UMask=0077
+
+# Future serial bridge: keep access scoped to the Arduino device.
+SupplementaryGroups=dialout
+DeviceAllow=/dev/ttyACM0 rw
+
+[Install]
+WantedBy=multi-user.target

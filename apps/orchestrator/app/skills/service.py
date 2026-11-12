@@ -9,7 +9,7 @@ from typing import Any, cast
 
 from supabase import Client
 
-from app.config import get_settings
+from app.config import get_app_settings
 from app.router.model_router import ModelRouter, TaskType
 from app.providers.base import TextMessage
 from app.skills.prompts import get_system_prompt
@@ -29,7 +29,7 @@ async def _execute_llm_step(
     context: dict[str, Any],
     router: ModelRouter,
 ) -> str:
-    settings = get_settings()
+    settings = get_app_settings()
     task_type = step.get("task_type") or settings.routing.default_task_type
     template_id = step.get("prompt_template_id")
     system_content = get_system_prompt(template_id)
@@ -49,7 +49,7 @@ async def _execute_llm_step(
 
 
 async def _execute_postprocess_step(step: dict[str, Any], input_text: str) -> str:
-    settings = get_settings()
+    settings = get_app_settings()
     kind = step.get("kind") or settings.routing.default_postprocess_kind
     if kind == "trim":
         return input_text.strip()

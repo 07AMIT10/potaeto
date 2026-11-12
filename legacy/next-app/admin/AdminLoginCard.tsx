@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 export function AdminLoginCard() {
   const router = useRouter();
   const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('change-me');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

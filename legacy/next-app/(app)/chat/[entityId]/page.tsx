@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { ChatUI } from './ChatUI';
+import { ChatUI } from '@/app/(app)/chat/[entityId]/ChatUI';
 import { SkillsSection } from '@/components/SkillsSection';
 import { resolveUserId } from '@/lib/auth/resolveUserId';
 import { parseAvatarTemplate } from '@/lib/avatar/template';

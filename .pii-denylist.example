@@ -1,0 +1,8 @@
+# Copy to .pii-denylist (gitignored) or ~/.config/potaeto-pii-denylist.txt.
+# One case-insensitive literal per line. Never commit real values.
+<real-name>
+<personal-email>
+<personal-domain>
+<private-ip>
+<personal-hostname>
+<hardware-model>

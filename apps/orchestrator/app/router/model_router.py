@@ -12,7 +12,7 @@ import time
 
 from supabase import create_client, Client
 
-from app.config import get_settings
+from app.config import get_app_settings
 from app.providers.base import Provider, TextMessage, TextRequest, TextResponse
 from app.router.health import ProviderHealthTracker
 
@@ -109,7 +109,7 @@ class _ModelsCache:
 
 class ModelRouter:
     def __init__(self) -> None:
-        settings = get_settings()
+        settings = get_app_settings()
         key = settings.supabase.service_role_key or settings.supabase.anon_key
         self._supabase: Client = create_client(settings.supabase.url, key)
         self._providers = _build_provider_registry(settings.routing.enabled_providers)

@@ -13,10 +13,15 @@ dependencies = [
   "groq>=0.11.0",
   "huggingface-hub>=0.26.0",
   "google-genai>=1.0.0",
+  "croniter>=7.0.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "pytest-asyncio", "pytest-httpx", "httpx", "ruff", "mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 
 [build-system]
 requires = ["hatchling"]

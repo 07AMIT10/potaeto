@@ -96,3 +96,7 @@ supabase/migrations/       # SQL migrations (15 files)
 ## Icon
 
 Add a cute potato icon at `public/icon-192.png` and `public/icon-512.png` for the PWA manifest.
+
+## Privacy / OSS-safe rule
+
+This repository must stay safe to publish. See **[docs/PII_POLICY.md](./docs/PII_POLICY.md)** and run `scripts/check-pii.sh` before pushing (or enable the pre-commit hook with `git config core.hooksPath .githooks`). The private `agent-memory` store is the only place personal context may live; never copy it into the repo.

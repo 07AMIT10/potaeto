@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
-import { useAuthMode } from '@/lib/auth/useAuthMode';
-import { loadGuestChat, saveGuestChat, type GuestChatMessage } from '@/lib/guestStorage';
+import { useEffect, useState, useCallback } from 'react';
+import { useCore } from '@/components/providers/CoreProvider';
+import { ulid } from '@/lib/core/ulid';
 import { ChatBase, type ChatMessage } from '@/components/chat/ChatBase';
 import { QuickReplies } from '@/components/QuickReplies';
 import { MoodTimeline } from '@/components/MoodTimeline';
 import { ChatSearch } from '@/components/ChatSearch';
 import { ChatExport } from '@/components/ChatExport';
+import { ModelPicker } from '@/components/ModelPicker';
 import { playMessageSend, playMessageReceive, playReaction, isSoundEnabled, setSoundEnabled } from '@/lib/chat/sounds';
 import type { AvatarTemplateId } from '@/lib/avatar/template';
 
@@ -51,99 +52,90 @@ function SoundToggle() {
 }
 
 export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: ChatUIProps) {
+  const { client, db, conversationId, syncVersion, online } = useCore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [latestChunkLength, setLatestChunkLength] = useState(0);
-
-  const auth = useAuthMode();
+  // A message that is cached/queued but has no assistant answer yet. The
+  // banner lets the user retry the turn after reconnecting instead of leaving
+  // a silent gap (a full offline agent turn is out of scope for Release 1).
+  const [awaitingReply, setAwaitingReply] = useState<{ text: string } | null>(null);
 
   // -----------------------------------------------------------------------
-  // Load history
+  // Load history from the local IndexedDB cache
   // -----------------------------------------------------------------------
   useEffect(() => {
+    if (!conversationId) {
+      setInitialLoading(false);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        if (auth.mode === 'guest') {
-          const loadedGuest: GuestChatMessage[] = loadGuestChat(entityId);
-          if (cancelled) return;
-          const mapped: ChatMessage[] = loadedGuest.map((m) => ({
-            role: m.role,
-            parts: m.parts,
-          }));
-          setMessages(mapped);
-        } else {
-          const res = await fetch(`/api/conversations/${entityId}/messages`);
-          const data = await res.json();
-          if (!res.ok || cancelled) return;
-          const loaded: ChatMessage[] = (data.messages ?? []).map(
-            (m: { role: string; content: string; meta?: { proactive?: boolean } }) => ({
-              role: m.role === 'assistant' ? 'model' : 'user',
-              parts: m.content,
-              proactive: m.meta?.proactive ?? false,
-            })
-          );
-          setMessages(loaded);
-        }
+        const rows = await db.messages
+          .where('conversationId')
+          .equals(conversationId)
+          .sortBy('createdAt');
+        if (cancelled) return;
+        setMessages(
+          rows.map((m) => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: m.content,
+          }))
+        );
       } finally {
         if (!cancelled) setInitialLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [auth.mode, entityId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [db, conversationId, syncVersion]);
 
   // -----------------------------------------------------------------------
-  // Send message (streaming)
+  // Send message: persist to cache + outbox, then stream (best-effort)
   // -----------------------------------------------------------------------
-  const send = useCallback(async () => {
-    const text = input.trim();
-    if (!text || loading) return;
-    setInput('');
-    const userMsg: ChatMessage = { role: 'user', parts: text };
-    setMessages((m) => [...m, userMsg]);
-    playMessageSend();
-    setLoading(true);
-    setStreaming(false);
-    setLatestChunkLength(0);
+  const streamTurn = useCallback(
+    async (text: string, { clientMessageId, addUser }: { clientMessageId?: string; addUser: boolean }) => {
+      if (!conversationId) return;
 
-    try {
-      if (auth.mode === 'guest') {
-        const historyPayload: GuestChatMessage[] = messages.map((m) => ({
-          role: m.role,
-          parts: m.parts,
-        }));
-        const res = await fetch('/api/guest/ai/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            entityName,
-            message: text,
-            history: historyPayload.map((m) => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.parts })),
-          }),
+      const messageId = clientMessageId ?? ulid();
+      const now = new Date().toISOString();
+
+      if (addUser) {
+        setMessages((m) => [...m, { role: 'user', parts: text }]);
+      }
+      playMessageSend();
+      setLoading(true);
+      setStreaming(false);
+      setLatestChunkLength(0);
+
+      // Offline-first: cache the user message and queue it for sync. The
+      // outbox entry is removed below only if this turn actually streams.
+      if (addUser) {
+        await db.messages.put({ id: messageId, conversationId, role: 'user', content: text, createdAt: now });
+        await db.outbox.add({
+          idempotencyKey: messageId,
+          entityType: 'message',
+          entityId: messageId,
+          baseRev: 0,
+          payload: { agent_id: entityId, content: text, role: 'user', channel: 'app' },
+          createdAt: now,
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          setMessages((m) => [
-            ...m,
-            { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` },
-          ]);
-          setLoading(false);
-          return;
-        }
-        const reader = res.body?.getReader();
-        const decoder = new TextDecoder();
-        let full = '';
-        setMessages((m) => [...m, { role: 'model', parts: '' }]);
-        setStreaming(true);
+      }
 
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
+      let full = '';
+      let assistantId: string | null = null;
+      setMessages((m) => [...m, { role: 'model', parts: '' }]);
+      setStreaming(true);
+
+      try {
+        for await (const event of client.chatStream({ conversationId, message: text, clientMessageId: messageId })) {
+          if (event.type === 'token') {
+            const chunk = typeof event.data.text === 'string' ? event.data.text : '';
             full += chunk;
             setLatestChunkLength(chunk.length);
             setMessages((m) => {
@@ -152,77 +144,70 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
               if (last.role === 'model') next[next.length - 1] = { ...last, parts: full };
               return next;
             });
+          } else if (event.type === 'done') {
+            assistantId = typeof event.data.message_id === 'string' ? event.data.message_id : null;
+          } else if (event.type === 'error') {
+            const message = String(event.data.message ?? event.data.code ?? 'unknown error');
+            if (!full) {
+              full = `Error: ${message}`;
+              setMessages((m) => {
+                const next = [...m];
+                const last = next[next.length - 1];
+                if (last.role === 'model') next[next.length - 1] = { ...last, parts: full };
+                return next;
+              });
+            }
           }
         }
-        setStreaming(false);
-        playMessageReceive();
-        setLoading(false);
-        const finalMessages: ChatMessage[] = [];
-        setMessages((m) => {
-          finalMessages.push(...m);
-          return m;
-        });
-        const toStore: GuestChatMessage[] = finalMessages.map((m) => ({
-          role: m.role,
-          parts: m.parts,
-        }));
-        saveGuestChat(entityId, toStore);
-        return;
-      }
 
-      // Authenticated user.
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entityId, message: text }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        setMessages((m) => [
-          ...m,
-          { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` },
-        ]);
-        setLoading(false);
-        return;
-      }
-      const conversationId = res.headers.get('X-Conversation-Id') ?? '';
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let full = '';
-      setMessages((m) => [...m, { role: 'model', parts: '' }]);
-      setStreaming(true);
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          full += chunk;
-          setLatestChunkLength(chunk.length);
-          setMessages((m) => {
-            const next = [...m];
-            const last = next[next.length - 1];
-            if (last.role === 'model') next[next.length - 1] = { ...last, parts: full };
-            return next;
+        // The turn streamed and the loop persisted the user message
+        // server-side (deduped by client_message_id), so drop the outbox entry.
+        await db.outbox.delete(messageId);
+        if (full) {
+          await db.messages.put({
+            id: assistantId ?? `${messageId}:assistant`,
+            conversationId,
+            role: 'assistant',
+            content: full,
+            createdAt: new Date().toISOString(),
           });
         }
+        setAwaitingReply(null);
+        playMessageReceive();
+      } catch {
+        // Offline or stream failure: keep the outbox entry so flush() pushes it
+        // on reconnect. Remove the empty assistant placeholder (no reply
+        // arrived) and surface the queued message through the banner instead.
+        setMessages((m) => {
+          const next = [...m];
+          const last = next[next.length - 1];
+          if (last.role === 'model' && !last.parts) next.pop();
+          return next;
+        });
+        if (!full) setAwaitingReply({ text });
+      } finally {
+        setStreaming(false);
+        setLoading(false);
       }
-      setStreaming(false);
-      playMessageReceive();
+    },
+    [client, db, conversationId, entityId]
+  );
 
-      if (conversationId && full.trim()) {
-        fetch('/api/ai/chat/finalize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ entityId, conversationId, content: full.trim() }),
-        }).catch(() => {});
-      }
-    } catch (e) {
-      setMessages((m) => [...m, { role: 'model', parts: `Error: ${String(e)}` }]);
-    }
-    setLoading(false);
-    setStreaming(false);
-  }, [input, loading, messages, auth.mode, entityId, entityName]);
+  const send = useCallback(() => {
+    const text = input.trim();
+    if (!text || loading) return;
+    setInput('');
+    void streamTurn(text, { addUser: true });
+  }, [input, loading, streamTurn]);
+
+  // Re-run a queued message's turn once the core is reachable again. The user
+  // message is already cached/pushed, so this must not add a second copy.
+  const retryAwaitingReply = useCallback(() => {
+    if (!awaitingReply || loading) return;
+    const text = awaitingReply.text;
+    setAwaitingReply(null);
+    void streamTurn(text, { addUser: false });
+  }, [awaitingReply, loading, streamTurn]);
 
   // -----------------------------------------------------------------------
   // Regenerate last assistant response
@@ -230,7 +215,6 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   const regenerate = useCallback(async () => {
     if (loading || messages.length < 2) return;
 
-    // Find the last user message to re-send.
     let lastUserIdx = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user') {
@@ -241,82 +225,13 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
     if (lastUserIdx < 0) return;
 
     const lastUserText = messages[lastUserIdx].parts;
-
-    // Remove the last assistant message.
     setMessages((m) => {
       const next = [...m];
-      if (next[next.length - 1].role === 'model') {
-        next.pop();
-      }
+      if (next[next.length - 1].role === 'model') next.pop();
       return next;
     });
-
-    // Re-send via the same flow.
-    setInput(lastUserText);
-    // We'll trigger send on next tick after input updates.
-    setTimeout(() => {
-      setInput('');
-      // Manually trigger send logic with the user text.
-      const doRegenerate = async () => {
-        setLoading(true);
-        setStreaming(false);
-        setLatestChunkLength(0);
-
-        try {
-          const res = await fetch('/api/ai/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ entityId, message: lastUserText }),
-          });
-          if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            setMessages((m) => [
-              ...m,
-              { role: 'model', parts: `Error: ${(err as { error?: string }).error ?? res.statusText}` },
-            ]);
-            setLoading(false);
-            return;
-          }
-          const conversationId = res.headers.get('X-Conversation-Id') ?? '';
-          const reader = res.body?.getReader();
-          const decoder = new TextDecoder();
-          let full = '';
-          setMessages((m) => [...m, { role: 'model', parts: '' }]);
-          setStreaming(true);
-
-          if (reader) {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-              const chunk = decoder.decode(value, { stream: true });
-              full += chunk;
-              setLatestChunkLength(chunk.length);
-              setMessages((m) => {
-                const next = [...m];
-                const last = next[next.length - 1];
-                if (last.role === 'model') next[next.length - 1] = { ...last, parts: full };
-                return next;
-              });
-            }
-          }
-          setStreaming(false);
-
-          if (conversationId && full.trim()) {
-            fetch('/api/ai/chat/finalize', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ entityId, conversationId, content: full.trim() }),
-            }).catch(() => {});
-          }
-        } catch (e) {
-          setMessages((m) => [...m, { role: 'model', parts: `Error: ${String(e)}` }]);
-        }
-        setLoading(false);
-        setStreaming(false);
-      };
-      doRegenerate();
-    }, 0);
-  }, [loading, messages, entityId]);
+    await streamTurn(lastUserText, { addUser: false });
+  }, [loading, messages, streamTurn]);
 
   // -----------------------------------------------------------------------
   // Reactions (client-side only)
@@ -327,7 +242,6 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
       const msg = { ...next[messageIndex] };
       const reactions = msg.reactions ? [...msg.reactions] : [];
       playReaction();
-      // Toggle: if already reacted with this emoji, remove it.
       const idx = reactions.indexOf(emoji);
       if (idx >= 0) {
         reactions.splice(idx, 1);
@@ -348,17 +262,15 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   }, []);
 
   // -----------------------------------------------------------------------
-  // Scroll to message (for search and timeline).
+  // Scroll to message (for search and timeline)
   // -----------------------------------------------------------------------
   const scrollToMessage = useCallback((index: number) => {
-    // ChatBase renders message list — we scroll to the container's child.
     const container = document.querySelector('.overflow-y-auto');
     if (!container) return;
     const messages_divs = container.querySelectorAll('[class*="animate-fade-in"]');
     const target = messages_divs[index];
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Brief highlight.
       target.classList.add('ring-2', 'ring-potato-400', 'rounded-xl');
       setTimeout(() => {
         target.classList.remove('ring-2', 'ring-potato-400', 'rounded-xl');
@@ -390,9 +302,10 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
       onInputChange={setInput}
       onSend={send}
       onReaction={handleReaction}
-      onRegenerate={auth.mode !== 'guest' ? regenerate : undefined}
+      onRegenerate={regenerate}
       headerContent={
         <div className="flex items-center justify-end gap-1 px-4 pt-2">
+          <ModelPicker />
           <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
           <ChatExport messages={messages} entityName={entityName} />
           <SoundToggle />
@@ -402,13 +315,35 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
         <MoodTimeline messages={messages} onClickMessage={scrollToMessage} />
       }
       aboveInput={
-        !loading && latestAssistantText ? (
-          <QuickReplies
-            latestAssistantText={latestAssistantText}
-            onSelect={handleQuickReply}
-            disabled={loading}
-          />
-        ) : undefined
+        <>
+          {awaitingReply && (
+            <div
+              role="status"
+              className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+            >
+              <span>
+                {online
+                  ? 'Sent — awaiting reply.'
+                  : 'Saved offline — will send when you reconnect.'}
+              </span>
+              <button
+                type="button"
+                onClick={retryAwaitingReply}
+                disabled={loading}
+                className="btn-ghost shrink-0 px-2 py-1 text-xs"
+              >
+                Retry
+              </button>
+            </div>
+          )}
+          {!loading && latestAssistantText ? (
+            <QuickReplies
+              latestAssistantText={latestAssistantText}
+              onSelect={handleQuickReply}
+              disabled={loading}
+            />
+          ) : null}
+        </>
       }
     />
   );
