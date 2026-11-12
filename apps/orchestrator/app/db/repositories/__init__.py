@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.db.repositories.approvals import ApprovalRepo
 from app.db.repositories.audit import AuditEvent, AuditRepo
 from app.db.repositories.base import BaseRepo, new_id
 from app.db.repositories.conversations import Conversation, ConversationRepo
@@ -21,6 +22,7 @@ from app.db.repositories.usage import ProviderUsage, UsageRepo
 from app.db.repositories.users import User, UserRepo
 
 __all__ = [
+    "ApprovalRepo",
     "AuditEvent",
     "AuditRepo",
     "BaseRepo",

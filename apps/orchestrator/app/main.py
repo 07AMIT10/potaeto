@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.agent.factory import build_agent_loop, choices_from_state
 from app.agent.loop import TurnQueue
 from app.api.admin import router as admin_router
+from app.api.approvals import router as approvals_router
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.errors import install_error_handlers
@@ -134,6 +135,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(models_router)
     app.include_router(chat_router)
     app.include_router(voice_router)
+    app.include_router(approvals_router)
     return app
 
 
