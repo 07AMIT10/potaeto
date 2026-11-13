@@ -24,7 +24,8 @@ export default function PairPage() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${coreBaseUrl()}/v1/auth/pair`, {
+      const baseUrl = coreBaseUrl();
+      const response = await fetch(`${baseUrl}/v1/auth/pair`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -40,6 +41,12 @@ export default function PairPage() {
             : `Pairing failed (HTTP ${response.status}). Please try again.`,
         );
         return;
+      }
+      if (typeof response.json === 'function') {
+        const data = await response.json().catch(() => null);
+        if (data?.token && typeof window !== 'undefined') {
+          localStorage.setItem('potaeto_device_token', data.token);
+        }
       }
       router.push('/chat');
     } catch {

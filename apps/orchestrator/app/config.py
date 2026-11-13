@@ -77,7 +77,17 @@ class Settings:
     #: ``Secure`` on the device cookie. Defaults on for production; local dev
     #: over plain HTTP opts out with ``POTAETO_COOKIE_SECURE=0``.
     cookie_secure: bool = True
-    cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: list[str] = field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8080",
+            "http://127.0.0.1:8080",
+            "http://tauri.localhost",
+            "https://tauri.localhost",
+            "tauri://localhost",
+        ]
+    )
     #: Run the background job runner. Off by default so tests and one-off CLI
     #: commands never start a worker by accident.
     scheduler_enabled: bool = False
@@ -107,7 +117,18 @@ def get_settings() -> Settings:
         context_floor_tokens=_env_positive_int("POTAETO_CONTEXT_FLOOR", 4000),
         memory_dir=_env_str("POTAETO_MEMORY_DIR"),
         cookie_secure=_env_bool("POTAETO_COOKIE_SECURE", default=True),
-        cors_origins=_env_list("POTAETO_CORS_ORIGINS", ["http://localhost:3000"]),
+        cors_origins=_env_list(
+            "POTAETO_CORS_ORIGINS",
+            [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "http://localhost:8080",
+                "http://127.0.0.1:8080",
+                "http://tauri.localhost",
+                "https://tauri.localhost",
+                "tauri://localhost",
+            ],
+        ),
         scheduler_enabled=_env_bool("POTAETO_SCHEDULER_ENABLED"),
         smoke_provider=_env_bool("POTAETO_SMOKE_PROVIDER"),
         rate_limit_pair_per_min=_env_int("RATE_LIMIT_PAIR_PER_MIN", 10),

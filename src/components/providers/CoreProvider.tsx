@@ -22,6 +22,13 @@ import type { ConversationInfo, PrimaryAgent } from '@/lib/core/types';
  * the variable to the core's address in `.env.local`.
  */
 export function coreBaseUrl(value = process.env.NEXT_PUBLIC_CORE_URL): string {
+  if (typeof window !== 'undefined') {
+    const custom = localStorage.getItem('potaeto_core_url');
+    if (custom) return custom.replace(/\/+$/, '');
+    if (window.location.origin.includes('tauri.localhost') || window.location.origin.includes('tauri://')) {
+      return 'http://127.0.0.1:8010';
+    }
+  }
   return value ?? '';
 }
 

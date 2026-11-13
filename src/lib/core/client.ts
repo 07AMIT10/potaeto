@@ -318,9 +318,16 @@ export class CoreClient {
 
   /** Stream one turn as parsed SSE `AgentEvent`s. */
   async *chatStream(input: ChatStreamInput): AsyncIterable<AgentEvent> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('potaeto_device_token');
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
     const response = await fetch(`${this.baseUrl}/v1/chat/stream`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       credentials: 'include',
       body: JSON.stringify({
         conversation_id: input.conversationId,
@@ -361,10 +368,20 @@ export class CoreClient {
   }
 
   private async requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...((init?.headers as Record<string, string>) ?? {}),
+    };
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('potaeto_device_token');
+      if (token && !headers['Authorization']) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+    }
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      headers,
     });
     if (!response.ok) {
       throw new CoreError(`${path} failed (${response.status})`, response.status);
