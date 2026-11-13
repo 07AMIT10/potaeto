@@ -122,6 +122,16 @@ class UsageRepo(BaseRepo):
 
     def summary(self) -> dict[str, Any]:
         """Aggregate total and per-provider / per-model usage statistics."""
+        def _get(row: Any, key: str, idx: int, default: Any = 0) -> Any:
+            if row is None:
+                return default
+            try:
+                return row[key]
+            except (TypeError, KeyError, IndexError):
+                if isinstance(row, (tuple, list)) and len(row) > idx:
+                    return row[idx]
+                return default
+
         tot_row = self._one(
             """
             SELECT
@@ -132,10 +142,10 @@ class UsageRepo(BaseRepo):
             FROM provider_usage
             """
         )
-        total_tokens_in = int(tot_row["total_tokens_in"]) if tot_row else 0
-        total_tokens_out = int(tot_row["total_tokens_out"]) if tot_row else 0
-        total_cost = round(float(tot_row["total_cost"]), 6) if tot_row else 0.0
-        call_count = int(tot_row["call_count"]) if tot_row else 0
+        total_tokens_in = int(_get(tot_row, "total_tokens_in", 0, 0))
+        total_tokens_out = int(_get(tot_row, "total_tokens_out", 1, 0))
+        total_cost = round(float(_get(tot_row, "total_cost", 2, 0.0)), 6)
+        call_count = int(_get(tot_row, "call_count", 3, 0))
 
         prov_rows = self._all(
             """
@@ -152,12 +162,14 @@ class UsageRepo(BaseRepo):
         )
         by_provider: dict[str, dict[str, Any]] = {}
         for r in prov_rows:
-            by_provider[r["provider"]] = {
-                "tokens_in": int(r["tokens_in"]),
-                "tokens_out": int(r["tokens_out"]),
-                "cost": round(float(r["cost"]), 6),
-                "call_count": int(r["call_count"]),
-            }
+            p_name = str(_get(r, "provider", 0, ""))
+            if p_name:
+                by_provider[p_name] = {
+                    "tokens_in": int(_get(r, "tokens_in", 1, 0)),
+                    "tokens_out": int(_get(r, "tokens_out", 2, 0)),
+                    "cost": round(float(_get(r, "cost", 3, 0.0)), 6),
+                    "call_count": int(_get(r, "call_count", 4, 0)),
+                }
 
         model_rows = self._all(
             """
@@ -174,12 +186,14 @@ class UsageRepo(BaseRepo):
         )
         by_model: dict[str, dict[str, Any]] = {}
         for r in model_rows:
-            by_model[r["model_id"]] = {
-                "tokens_in": int(r["tokens_in"]),
-                "tokens_out": int(r["tokens_out"]),
-                "cost": round(float(r["cost"]), 6),
-                "call_count": int(r["call_count"]),
-            }
+            m_name = str(_get(r, "model_id", 0, ""))
+            if m_name:
+                by_model[m_name] = {
+                    "tokens_in": int(_get(r, "tokens_in", 1, 0)),
+                    "tokens_out": int(_get(r, "tokens_out", 2, 0)),
+                    "cost": round(float(_get(r, "cost", 3, 0.0)), 6),
+                    "call_count": int(_get(r, "call_count", 4, 0)),
+                }
 
         return {
             "total_tokens_in": total_tokens_in,
