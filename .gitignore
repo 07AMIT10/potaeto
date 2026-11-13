@@ -54,3 +54,4 @@ src-tauri/target/
 
 # private PII denylist (never commit)
 .pii-denylist
+/data/
