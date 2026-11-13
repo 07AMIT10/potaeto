@@ -20,6 +20,7 @@
 
 # worktrees
 .worktrees/
+.superpowers/
 
 # debug
 npm-debug.log*
