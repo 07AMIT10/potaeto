@@ -13,7 +13,7 @@
  */
 
 import type { LocalDb } from './db';
-import type { FlushResult, PushOperation, PushResult, SyncChange, SyncResponse } from './types';
+import type { FlushResult, PushConflict, PushOperation, PushResult, SyncChange, SyncResponse } from './types';
 
 export interface SyncClient {
   push(operations: PushOperation[]): Promise<PushResult[]>;
@@ -30,6 +30,7 @@ export class SyncEngine {
     const entries = await this.db.outbox.toArray();
     let applied = 0;
     let failed = 0;
+    const conflicts: PushConflict[] = [];
 
     try {
       const operations: PushOperation[] = entries.map((entry) => ({
@@ -49,6 +50,17 @@ export class SyncEngine {
           applied += 1;
         } else {
           failed += 1;
+          if (result && result.status === 'conflict') {
+            conflicts.push({
+              idempotencyKey: entry.idempotencyKey,
+              entityType: entry.entityType,
+              entityId: entry.entityId,
+              baseRev: entry.baseRev,
+              serverRev: result.rev,
+              error: result.error,
+              localPayload: entry.payload,
+            });
+          }
         }
       }
     } catch {
@@ -56,7 +68,30 @@ export class SyncEngine {
       failed = entries.length;
     }
 
-    return { applied, failed };
+    return { applied, failed, conflicts };
+  }
+
+  async resolveConflict(idempotencyKey: string, action: 'keep_local' | 'accept_server'): Promise<void> {
+    const entry = await this.db.outbox.get(idempotencyKey);
+    if (!entry) return;
+
+    if (action === 'accept_server') {
+      await this.db.outbox.delete(idempotencyKey);
+      await this.pull();
+      return;
+    }
+
+    if (action === 'keep_local') {
+      // Fetch latest server revision, re-align baseRev and re-queue
+      const syncRes = await this.pull();
+      let latestRev = entry.baseRev + 1;
+      for (const change of syncRes.changes) {
+        if (change.entityId === entry.entityId && typeof change.payload?.rev === 'number') {
+          latestRev = Math.max(latestRev, change.payload.rev);
+        }
+      }
+      await this.db.outbox.update(idempotencyKey, { baseRev: latestRev });
+    }
   }
 
   async pull(): Promise<SyncResponse> {

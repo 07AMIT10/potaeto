@@ -74,9 +74,20 @@ export interface SyncResponse {
   hasMore: boolean;
 }
 
+export interface PushConflict {
+  idempotencyKey: string;
+  entityType: string;
+  entityId: string;
+  baseRev: number;
+  serverRev: number | null;
+  error: string | null;
+  localPayload: Record<string, unknown>;
+}
+
 export interface FlushResult {
   applied: number;
   failed: number;
+  conflicts: PushConflict[];
 }
 
 export interface PrimaryAgent {
@@ -108,6 +119,29 @@ export interface ModelCatalog {
   models: CatalogModel[];
   activeModel: string | null;
   activeProvider: string | null;
+}
+
+export interface ProviderStat {
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+  call_count: number;
+}
+
+export interface ModelStat {
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+  call_count: number;
+}
+
+export interface ProviderUsageSummary {
+  total_tokens_in: number;
+  total_tokens_out: number;
+  total_cost: number;
+  call_count: number;
+  by_provider: Record<string, ProviderStat>;
+  by_model: Record<string, ModelStat>;
 }
 
 export type MessageRole = 'user' | 'assistant';

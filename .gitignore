@@ -46,6 +46,9 @@ __pycache__/
 # local sqlite data
 /apps/orchestrator/data/
 
+# tauri / rust
+src-tauri/target/
+
 # one-time Supabase exports (personal data)
 /exports/
 

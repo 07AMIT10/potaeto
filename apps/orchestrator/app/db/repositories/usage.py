@@ -119,3 +119,73 @@ class UsageRepo(BaseRepo):
             params,
         )
         return [self._to_model(row) for row in rows]
+
+    def summary(self) -> dict[str, Any]:
+        """Aggregate total and per-provider / per-model usage statistics."""
+        tot_row = self._one(
+            """
+            SELECT
+                COALESCE(SUM(tokens_in), 0) AS total_tokens_in,
+                COALESCE(SUM(tokens_out), 0) AS total_tokens_out,
+                COALESCE(SUM(cost), 0.0) AS total_cost,
+                COUNT(*) AS call_count
+            FROM provider_usage
+            """
+        )
+        total_tokens_in = int(tot_row["total_tokens_in"]) if tot_row else 0
+        total_tokens_out = int(tot_row["total_tokens_out"]) if tot_row else 0
+        total_cost = round(float(tot_row["total_cost"]), 6) if tot_row else 0.0
+        call_count = int(tot_row["call_count"]) if tot_row else 0
+
+        prov_rows = self._all(
+            """
+            SELECT
+                provider,
+                COALESCE(SUM(tokens_in), 0) AS tokens_in,
+                COALESCE(SUM(tokens_out), 0) AS tokens_out,
+                COALESCE(SUM(cost), 0.0) AS cost,
+                COUNT(*) AS call_count
+            FROM provider_usage
+            GROUP BY provider
+            ORDER BY provider
+            """
+        )
+        by_provider: dict[str, dict[str, Any]] = {}
+        for r in prov_rows:
+            by_provider[r["provider"]] = {
+                "tokens_in": int(r["tokens_in"]),
+                "tokens_out": int(r["tokens_out"]),
+                "cost": round(float(r["cost"]), 6),
+                "call_count": int(r["call_count"]),
+            }
+
+        model_rows = self._all(
+            """
+            SELECT
+                model_id,
+                COALESCE(SUM(tokens_in), 0) AS tokens_in,
+                COALESCE(SUM(tokens_out), 0) AS tokens_out,
+                COALESCE(SUM(cost), 0.0) AS cost,
+                COUNT(*) AS call_count
+            FROM provider_usage
+            GROUP BY model_id
+            ORDER BY model_id
+            """
+        )
+        by_model: dict[str, dict[str, Any]] = {}
+        for r in model_rows:
+            by_model[r["model_id"]] = {
+                "tokens_in": int(r["tokens_in"]),
+                "tokens_out": int(r["tokens_out"]),
+                "cost": round(float(r["cost"]), 6),
+                "call_count": int(r["call_count"]),
+            }
+
+        return {
+            "total_tokens_in": total_tokens_in,
+            "total_tokens_out": total_tokens_out,
+            "total_cost": total_cost,
+            "call_count": call_count,
+            "by_provider": by_provider,
+            "by_model": by_model,
+        }

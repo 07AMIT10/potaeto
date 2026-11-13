@@ -19,6 +19,7 @@ import type {
   MemoryStatus,
   ModelCatalog,
   PrimaryAgent,
+  ProviderUsageSummary,
   PushOperation,
   PushResult,
   PushStatus,
@@ -179,6 +180,11 @@ export class CoreClient {
       method: 'POST',
       body: JSON.stringify({ model, provider: provider || undefined }),
     });
+  }
+
+  /** Aggregate token and cost usage summary across providers/models. */
+  async getModelUsage(): Promise<ProviderUsageSummary> {
+    return this.requestJson<ProviderUsageSummary>('/v1/models/usage');
   }
 
   /** Fetch memories for governance, optionally filtered by status. */

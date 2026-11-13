@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import sqlite3
 import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 
 from app.providers.base import ModelInfo
+
+logger = logging.getLogger(__name__)
 
 # TTL applied to entries loaded back from SQLite (the persisted TTL is not
 # stored; this just avoids re-querying the DB on every get).
@@ -77,6 +81,60 @@ class CatalogCache:
                 self._execute(
                     "DELETE FROM model_catalog WHERE provider = ?", (provider,)
                 )
+
+    async def refresh(
+        self,
+        provider: str,
+        fetcher: Any,
+        *,
+        ttl_sec: float = 3600.0,
+    ) -> list[ModelInfo]:
+        """Fetch fresh catalog for ``provider`` with stale-while-error fallback.
+
+        If ``fetcher()`` succeeds, caches and returns the result. If ``fetcher()``
+        raises an exception (e.g. timeout, 429, 503, network error), catches it,
+        logs a warning, and returns the last cached entries (stale-while-error pattern)
+        rather than raising an error.
+        """
+        try:
+            res = fetcher()
+            if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
+                models = await res
+            else:
+                models = res
+            if models is not None:
+                self.set(provider, list(models), ttl_sec=ttl_sec)
+                return list(models)
+        except Exception as exc:
+            logger.warning(
+                "model catalog refresh for %s failed (%s: %s); serving stale fallback",
+                provider,
+                type(exc).__name__,
+                exc,
+            )
+        return self.get_stale(provider) or []
+
+    def refresh_sync(
+        self,
+        provider: str,
+        fetcher: Any,
+        *,
+        ttl_sec: float = 3600.0,
+    ) -> list[ModelInfo]:
+        """Synchronously refresh catalog for ``provider`` with stale-while-error fallback."""
+        try:
+            models = fetcher()
+            if models is not None:
+                self.set(provider, list(models), ttl_sec=ttl_sec)
+                return list(models)
+        except Exception as exc:
+            logger.warning(
+                "model catalog refresh for %s failed (%s: %s); serving stale fallback",
+                provider,
+                type(exc).__name__,
+                exc,
+            )
+        return self.get_stale(provider) or []
 
     # ── SQLite backing ────────────────────────────────────────────────
 

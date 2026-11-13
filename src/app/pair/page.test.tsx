@@ -60,4 +60,11 @@ describe('PairPage', () => {
     expect(alert).toHaveTextContent(/invalid or has expired/i);
     expect(mocks.push).not.toHaveBeenCalled();
   });
+
+  it('renders the Storage & Sync card and persistence status', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    render(<PairPage />);
+    expect(screen.getByRole('heading', { name: /Storage & Sync/i })).toBeInTheDocument();
+    expect(await screen.findByTestId('persistence-badge')).toBeInTheDocument();
+  });
 });

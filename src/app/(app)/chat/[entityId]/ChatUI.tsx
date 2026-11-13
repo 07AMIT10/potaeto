@@ -12,6 +12,7 @@ import { ChatExport } from '@/components/ChatExport';
 import { ModelPicker } from '@/components/ModelPicker';
 import { ApprovalModal } from '@/components/chat/ApprovalModal';
 import { playMessageSend, playMessageReceive, playReaction, isSoundEnabled, setSoundEnabled } from '@/lib/chat/sounds';
+import { sendNotification } from '@/lib/native/notifications';
 import type { AvatarTemplateId } from '@/lib/avatar/template';
 
 interface ChatUIProps {
@@ -203,6 +204,10 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
               tool_name: toolName,
               arguments: args,
               expires_at: expiresAt,
+            });
+            void sendNotification({
+              title: 'Approval Required',
+              body: 'A tool call requires your approval.',
             });
           } else if (event.type === 'done') {
             assistantId = typeof event.data.message_id === 'string' ? event.data.message_id : null;

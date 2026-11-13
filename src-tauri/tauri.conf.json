@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Potaeto",
+  "version": "0.1.0",
+  "identifier": "com.potaeto.app",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Potaeto",
+        "width": 1100,
+        "height": 750,
+        "minWidth": 600,
+        "minHeight": 400
+      }
+    ]
+  }
+}

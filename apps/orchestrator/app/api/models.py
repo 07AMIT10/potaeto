@@ -20,6 +20,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.auth.dependencies import AuthContext, get_db, require_device
+from app.catalog.cache import CatalogCache
+from app.db.repositories.usage import UsageRepo
 from app.model_selection import (
     apply_model_selection,
     read_active_selection,
@@ -78,19 +80,70 @@ class ActiveModelResponse(BaseModel):
     active_provider: str | None = None
 
 
-async def _provider_models(provider: Any) -> list[ModelInfo]:
+class ProviderStat(BaseModel):
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost: float = 0.0
+    call_count: int = 0
+
+
+class ModelStat(BaseModel):
+    tokens_in: int = 0
+    tokens_out: int = 0
+    cost: float = 0.0
+    call_count: int = 0
+
+
+class ProviderUsageSummaryResponse(BaseModel):
+    total_tokens_in: int = 0
+    total_tokens_out: int = 0
+    total_cost: float = 0.0
+    call_count: int = 0
+    by_provider: dict[str, ProviderStat] = Field(default_factory=dict)
+    by_model: dict[str, ModelStat] = Field(default_factory=dict)
+
+
+async def _provider_models(
+    provider: Any, db: sqlite3.Connection | None = None
+) -> list[ModelInfo]:
+    name = getattr(provider, "name", "unknown")
     try:
-        return await asyncio.wait_for(provider.list_models(), CATALOG_TIMEOUT_SEC)
+        models = await asyncio.wait_for(provider.list_models(), CATALOG_TIMEOUT_SEC)
+        if models:
+            if db is not None:
+                CatalogCache(db=db).set(name, models, ttl_sec=3600.0)
+            return models
     except TimeoutError:
-        logger.warning("model catalog fetch for %s timed out", provider.name)
+        logger.warning("model catalog fetch for %s timed out", name)
     except Exception as exc:  # noqa: BLE001 - one bad provider must not hide the rest
         logger.warning(
             "model catalog fetch for %s failed (%s: %s)",
-            provider.name,
+            name,
             type(exc).__name__,
             exc,
         )
+
+    # Stale-while-error fallback: return last cached entries rather than raising error
+    cache = getattr(provider, "_cache", None)
+    if cache is not None and hasattr(cache, "get_stale"):
+        stale = cache.get_stale(name)
+        if stale:
+            return stale
+    if db is not None and name:
+        stale = CatalogCache(db=db).get_stale(name)
+        if stale:
+            return stale
     return []
+
+
+@router.get("/models/usage", response_model=ProviderUsageSummaryResponse)
+async def get_models_usage(
+    ctx: Annotated[AuthContext, Depends(require_device)],
+    db: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> ProviderUsageSummaryResponse:
+    """Return aggregated token and cost usage summary across providers and models."""
+    repo = UsageRepo(db)
+    return ProviderUsageSummaryResponse.model_validate(repo.summary())
 
 
 @router.get("/models", response_model=ModelCatalogResponse)
@@ -102,8 +155,9 @@ async def list_models(
     registry = getattr(request.app.state, "providers", None)
     names = registry.names() if registry is not None else []
     providers = [registry.get(name) for name in names]
+    db = getattr(request.app.state, "db", None)
     results = await asyncio.gather(
-        *(_provider_models(provider) for provider in providers if provider is not None)
+        *(_provider_models(provider, db=db) for provider in providers if provider is not None)
     )
     models = [ModelInfoResponse.from_info(info) for batch in results for info in batch]
     active = read_active_selection(request.app.state.db)

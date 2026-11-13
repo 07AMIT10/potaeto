@@ -46,9 +46,42 @@ describe('SyncEngine', () => {
       { idempotencyKey: 'k3', entityType: 'entity', entityId: 'e1', baseRev: 0, payload: {} },
     ]);
     const result = await sync.flush();
-    expect(result).toEqual({ applied: 2, failed: 1 });
+    expect(result.applied).toBe(2);
+    expect(result.failed).toBe(1);
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0]).toMatchObject({
+      idempotencyKey: 'k3',
+      entityId: 'e1',
+      serverRev: 3,
+      error: 'stale_rev',
+    });
     expect(await db.outbox.count()).toBe(1);
     expect(await db.outbox.get('k3')).toBeDefined();
+  });
+
+  it('resolves conflicts by accepting server or keeping local', async () => {
+    const db = new LocalDb('test');
+    const client = {
+      push: vi.fn(),
+      sync: vi.fn().mockResolvedValue({
+        changes: [
+          { seq: 10, entityType: 'entity', entityId: 'e1', operation: 'update', payload: { rev: 5 } },
+        ],
+        nextSeq: 10,
+        hasMore: false,
+      }),
+    };
+    const sync = new SyncEngine(db, client as any);
+    await db.outbox.add({ idempotencyKey: 'c1', entityType: 'entity', entityId: 'e1', baseRev: 2, payload: { name: 'Local' } });
+
+    // Test keep_local: bumps baseRev to match or exceed server rev
+    await sync.resolveConflict('c1', 'keep_local');
+    const kept = await db.outbox.get('c1');
+    expect(kept?.baseRev).toBe(5);
+
+    // Test accept_server: deletes local outbox item
+    await sync.resolveConflict('c1', 'accept_server');
+    expect(await db.outbox.get('c1')).toBeUndefined();
   });
 
   it('applies message changes and advances the cursor on pull', async () => {

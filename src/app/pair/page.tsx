@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { coreBaseUrl } from '@/components/providers/CoreProvider';
+import { StorageStatus } from '@/components/storage/StorageStatus';
 
 /**
  * Device pairing: exchange the server-printed single-use code for an HttpOnly
@@ -113,6 +114,13 @@ export default function PairPage() {
             {loading ? 'Pairing…' : 'Pair device'}
           </button>
         </form>
+
+        <section aria-labelledby="storage-sync-heading" className="card p-6 space-y-4">
+          <h2 id="storage-sync-heading" className="text-base font-semibold">
+            Storage &amp; Sync
+          </h2>
+          <StorageStatus />
+        </section>
 
         <p className="text-center text-sm text-[var(--muted)]">
           <Link href="/" className="text-potato-600 hover:underline">

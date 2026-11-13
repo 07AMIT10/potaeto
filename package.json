@@ -7,12 +7,17 @@
     "build": "next build",
     "start": "npx --yes serve out",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
+    "@sqlite.org/sqlite-wasm": "^3.54.1-build1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-notification": "^2.8.1",
+    "@tauri-apps/plugin-opener": "^2.7.3",
     "bcryptjs": "^2.4.3",
     "dexie": "^4.4.7",
     "next": "^16.4.6",
@@ -22,6 +27,7 @@
     "regenerator-runtime": "^0.14.1"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.12.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/bcryptjs": "^2.4.6",

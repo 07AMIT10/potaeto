@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useCore } from '@/components/providers/CoreProvider';
-import type { CatalogModel } from '@/lib/core/types';
+import type { CatalogModel, ProviderUsageSummary } from '@/lib/core/types';
 
 function describe(model: CatalogModel): string {
   const parts = [
@@ -11,6 +11,16 @@ function describe(model: CatalogModel): string {
     model.retention,
   ].filter(Boolean);
   return `${model.name}${parts.length ? ` — ${parts.join(' · ')}` : ''}`;
+}
+
+function formatTokens(total: number): string {
+  if (total >= 1_000_000) {
+    return `${(total / 1_000_000).toFixed(1)}M`;
+  }
+  if (total >= 1_000) {
+    return `${(total / 1_000).toFixed(1)}k`;
+  }
+  return `${total}`;
 }
 
 /**
@@ -23,15 +33,22 @@ export function ModelPicker() {
   const [models, setModels] = useState<CatalogModel[]>([]);
   const [active, setActive] = useState('');
   const [saving, setSaving] = useState(false);
+  const [usage, setUsage] = useState<ProviderUsageSummary | null>(null);
 
   useEffect(() => {
     if (!online) return;
     let cancelled = false;
     (async () => {
       try {
-        const catalog = await client.listModels();
+        const [catalog, usageData] = await Promise.all([
+          client.listModels(),
+          client.getModelUsage().catch(() => null),
+        ]);
         if (cancelled) return;
         setModels(catalog.models);
+        if (usageData) {
+          setUsage(usageData);
+        }
         if (catalog.activeModel) {
           const match = catalog.models.find(
             (model) => model.id === catalog.activeModel,
@@ -63,26 +80,43 @@ export function ModelPicker() {
     }
   };
 
+  const totalTokens = usage ? usage.total_tokens_in + usage.total_tokens_out : 0;
+  const hasUsage = usage && (totalTokens > 0 || usage.call_count > 0);
+
   return (
-    <label className="mr-auto flex items-center gap-1 text-xs text-[var(--muted)]">
-      <span className="sr-only">Model</span>
-      <select
-        aria-label="Model"
-        value={active}
-        disabled={saving}
-        onChange={(event) => void choose(event.target.value)}
-        className="max-w-[14rem] truncate rounded-md border border-[var(--card-border)] bg-[var(--card)] px-2 py-1 text-xs"
-      >
-        {!active && <option value="">Choose a model…</option>}
-        {models.map((model) => {
-          const value = `${model.provider}:${model.id}`;
-          return (
-            <option key={value} value={value}>
-              {describe(model)}
-            </option>
-          );
-        })}
-      </select>
-    </label>
+    <div className="mr-auto flex items-center gap-2">
+      <label className="flex items-center gap-1 text-xs text-[var(--muted)]">
+        <span className="sr-only">Model</span>
+        <select
+          aria-label="Model"
+          value={active}
+          disabled={saving}
+          onChange={(event) => void choose(event.target.value)}
+          className="max-w-[14rem] truncate rounded-md border border-[var(--card-border)] bg-[var(--card)] px-2 py-1 text-xs"
+        >
+          {!active && <option value="">Choose a model…</option>}
+          {models.map((model) => {
+            const value = `${model.provider}:${model.id}`;
+            return (
+              <option key={value} value={value}>
+                {describe(model)}
+              </option>
+            );
+          })}
+        </select>
+      </label>
+      {hasUsage && (
+        <span
+          data-testid="model-usage-badge"
+          className="inline-flex items-center gap-1 rounded-full border border-[var(--card-border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)]"
+          title={`In: ${usage.total_tokens_in.toLocaleString()} · Out: ${usage.total_tokens_out.toLocaleString()} · Total: ${totalTokens.toLocaleString()} tokens · Calls: ${usage.call_count}${usage.total_cost > 0 ? ` · Cost: $${usage.total_cost.toFixed(4)}` : ''}`}
+        >
+          <span className="font-mono">{formatTokens(totalTokens)} tok</span>
+          {usage.total_cost > 0 && (
+            <span className="text-[9px] opacity-80">${usage.total_cost.toFixed(2)}</span>
+          )}
+        </span>
+      )}
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import { ChatUI } from '../(app)/chat/[entityId]/ChatUI';
 const mocks = vi.hoisted(() => ({
   chatStream: vi.fn(),
   listModels: vi.fn().mockResolvedValue({ models: [], activeModel: null }),
+  sendNotification: vi.fn().mockResolvedValue(undefined),
 }));
 
 let testDb: LocalDb;
@@ -29,6 +30,10 @@ vi.mock('@/lib/chat/sounds', () => ({
   playReaction: vi.fn(),
   isSoundEnabled: () => false,
   setSoundEnabled: vi.fn(),
+}));
+
+vi.mock('@/lib/native/notifications', () => ({
+  sendNotification: mocks.sendNotification,
 }));
 
 beforeEach(async () => {
@@ -104,5 +109,35 @@ describe('ChatUI offline retry deduplication', () => {
 
     // Outbox was cleared because the turn streamed successfully
     expect(await testDb.outbox.count()).toBe(0);
+  });
+
+  it('triggers sendNotification when an approval_required event is received', async () => {
+    mocks.chatStream.mockImplementationOnce(async function* () {
+      yield {
+        type: 'approval_required',
+        data: {
+          approval_id: 'appr-123',
+          tool_name: 'arduino_flash',
+          arguments: { port: '/dev/ttyUSB0' },
+        },
+      };
+      yield { type: 'token', data: { text: 'Waiting for approval' } };
+      yield { type: 'done', data: { message_id: 'asst-2' } };
+    });
+
+    render(<ChatUI entityId="e_potaeto" entityName="Potaeto" />);
+
+    const input = await screen.findByPlaceholderText(/message potaeto/i);
+    fireEvent.change(input, { target: { value: 'Run tool requiring approval' } });
+
+    const sendButton = screen.getByRole('button', { name: /^send$/i });
+    fireEvent.click(sendButton);
+
+    await waitFor(() => {
+      expect(mocks.sendNotification).toHaveBeenCalledWith({
+        title: 'Approval Required',
+        body: 'A tool call requires your approval.',
+      });
+    });
   });
 });
