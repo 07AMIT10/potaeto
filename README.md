@@ -1,102 +1,212 @@
 # Potaeto
 
-Create **WHO and WHAT** you want to build — describe in text or voice, then chat, generate content, and share.
+Persistent personal AI companion and sentient agent core with durable memory, hardware control, scientific research grounding, and local voice.
 
-## Features
+Potaeto is a privacy-first, self-hosted sentient personal agent designed for continuous local execution. It unites deep persistent memory across sessions, hardware actuation and environmental sensing, sandboxed shell execution with cryptographic approval gating, scientific research grounding via Lens OS, speech synthesis/transcription, and proactive autonomous workflows.
 
-- **Character creation** via text or voice description, AI-parsed into structured persona
-- **Streaming chat** with your character (stays in character, remembers context)
-- **Proactive messaging** — your character reaches out when you've been away
-- **Script & voice** — generate scripts and play them with TTS
-- **Image & text generation** — create content as or for your character
-- **Skills pipeline** — extensible skill system (songwriter built-in, more via config)
-- **Share** — public entity profiles and content links
-- **Admin dashboard** — models, skills, memory, and usage metrics
+---
 
-## Stack
+## Architecture Overview
 
-- **Next.js 14** (App Router), **TypeScript**, **Tailwind CSS**
-- **Supabase** (Auth, Postgres, Storage, RLS)
-- **Google Gemini API** (text, image, TTS — server-side only)
-- **Python FastAPI** orchestrator (model routing, skills pipeline)
+```
+                                +---------------------------+
+                                |  Next.js 16.4.6 Static   |
+                                |     PWA Client (out/)     |
+                                +-------------+-------------+
+                                              | HTTP / SSE
+                                              v
++------------------------+      +---------------------------+      +--------------------------+
+|  Telegram Bot Client   | ---> |   FastAPI Core Engine     | <--- | Scheduled Workflows      |
+|  (Inline Approvals)    |      | (apps/orchestrator :8010) |      | (Cron & Autonomous Runs) |
++------------------------+      +-------------+-------------+      +--------------------------+
+                                              |
+      +-------------------+-------------------+-------------------+-------------------+
+      |                   |                   |                   |                   |
+      v                   v                   v                   v                   v
++------------+      +------------+      +------------+      +------------+      +------------+
+| SQLite WAL |      | Bubblewrap |      |  Lens OS   |      |  Arduino   |      | Voice Core |
+| Durable    |      | Sandboxed  |      |  Research  |      | Serial v1  |      | Piper TTS  |
+| Memory     |      | Execution  |      | Sidecar    |      | BLE Sense  |      | Whisper STT|
++------------+      +------------+      +------------+      +------------+      +------------+
+```
 
-## Requirements
+### Core Subsystems
 
-- **Node.js** >= 18.17 (>= 20 recommended)
-- **Python** >= 3.11 (for the orchestrator)
+1. **FastAPI Core Engine (`apps/orchestrator`, `:8010`)**:
+   Single-flight turn queue, streaming server-sent events (SSE), resilient provider routing (OpenCode Go, OpenRouter, offline fallback), and cryptographic approval gating.
+2. **Next.js Static PWA Client (`out/`)**:
+   Next.js 16.4.6 frontend exported as static assets (`output: 'export'`), backed by IndexedDB and offline-first queue synchronization (`/v1/sync`). Served locally via Caddy on `:8080`.
+3. **Durable Governed Memory (SQLite WAL)**:
+   SQLite WAL database (`journal_mode=WAL`, `synchronous=FULL`, `foreign_keys=ON`) storing facts, episodic summaries, tool audit records, and proactive scheduler state. Enforces a 7-scenario formal memory lifecycle (restart recall, multi-session aggregation, updates/superseding, temporal validity expiration, retraction, remembered preferences, and scope isolation).
+4. **Tool Approval & Sandboxed Execution**:
+   Deterministic action hashing (`sha256(tool_name + canonical_args)`), expiring one-time approvals via Web UI or Telegram inline buttons, and unshared-namespace Linux sandboxing using Bubblewrap (`bwrap`) locked to `data/sandbox`.
+5. **Academic Research Grounding (Lens OS Sidecar)**:
+   Stdio JSON-RPC 2.0 integration with native Rust `lens-mcp` sidecar, providing empirical paper discovery, source retrieval, and claim verification across OpenAlex, arXiv, and PubMed with full SSRF protection.
+6. **Hardware Telemetry & LED Bridge**:
+   Non-blocking async serial bridge communicating with Arduino Nano 33 BLE Sense Rev2 over `/dev/potaeto-arduino` at 115200 baud via Protocol v1. Features active-low RGB LED actuation (solid, blink, breathe presets) and telemetry collection (temperature, humidity, barometric pressure, light, 3-axis accelerometer).
+7. **Local Voice Worker (`potaeto-voice`)**:
+   Isolated voice processing subsystem running in a dedicated systemd slice (`MemoryMax=1G`). Fast neural text-to-speech with Piper TTS, deterministic SHA-256 audio disk caching, and Whisper.cpp speech-to-text transcription.
+8. **Proactive Autonomous Workflows**:
+   Cron-scheduled multi-step workflows executing tool calls, LLM steps, condition branching, notifications, and memory persistence with concurrency-safe database leasing.
 
-## Setup
+---
 
-1. **Clone and install**
-   ```bash
-   npm install
-   ```
+## Release 1 & Release 2 Capabilities
 
-2. **Environment**
-   - Copy `.env.example` to `.env.local`
-   - Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-   - Set `GOOGLE_GEMINI_API_KEY` (or let users add their own in profile)
-   - Set `ORCHESTRATOR_URL` (default: `http://localhost:8000`)
-   - Set `ADMIN_SECRET` for admin dashboard and proactive message trigger
+| Capability | Implementation | Description |
+|------------|----------------|-------------|
+| **Durable Memory** | `app.memory.service.MemoryService` | 7-scenario memory lifecycle, temporal validity, retraction, and 75% context rollup |
+| **Tool Approvals** | `app.db.repositories.approvals.ApprovalRepo` | Exact SHA-256 action hashing, expiring one-time tokens, Web & Telegram resolution |
+| **Sandboxed Execution**| `app.tools.run_command.run_command` | Bubblewrap (`bwrap`) namespace containment with read-only system roots and isolated workspace |
+| **Scientific Research**| `app.tools.lens_mcp.LensMcpClient` | Literature search, PDF source extraction, and claim verification via `lens-mcp` |
+| **Hardware Actuation** | `app.hardware.arduino.ArduinoBridge` | Protocol v1 JSON framing over serial, active-low RGB inversion, and bounded telemetry retention |
+| **Local Voice** | `app.voice.tts.PiperTts`, `app.voice.stt.WhisperStt` | Low-latency Piper TTS with disk caching and Whisper.cpp voice note transcription |
+| **Proactive Workflows**| `app.workflows.engine.WorkflowEngine` | Declarative JSON workflows running under advisory leases via `JobRunner` |
 
-3. **Database**
-   - Create a [Supabase project](https://supabase.com/dashboard) and get URL + anon + service_role keys.
-   - Apply migrations (pick one):
-     - **Supabase CLI**: `npx supabase link --project-ref <your-ref>` then `npx supabase db push`.
-     - **Dashboard**: In Supabase SQL Editor, run each file in `supabase/migrations/` in order (01 through 15).
-   - Storage buckets `avatars` and `content` are created by migration 04 (public read for share links).
+---
 
-4. **Orchestrator** (optional for MVP — required for chat, skills, proactive)
-   ```bash
-   cd apps/orchestrator
-   pip install -e .
-   uvicorn app.main:app --reload
-   ```
+## Quickstart & Local Setup
 
-5. **Run**
-   ```bash
-   npm run dev
-   ```
+### Prerequisites
 
-6. **Proactive messaging** (optional)
-   Set up a cron job to call `POST /api/proactive/trigger` with `X-Admin-Secret: <your-secret>` header. This finds idle conversations and generates entity-initiated messages.
+- **Python**: `>= 3.11` (managed via `uv`)
+- **Node.js**: `>= 20.x`
+- **Linux Tools** (optional for full hardware/sandbox runtime): `bubblewrap` (`bwrap`), `pyserial-asyncio`
 
-## Project Context
+### 1. Installation
 
-See **[context.md](./context.md)** for architecture, routes, data model, and conventions. It is the single source of context for other IDEs and agents and is updated after each iteration.
+Clone the repository and install dependencies:
 
-## Design
+```bash
+# Install frontend dependencies
+npm install
 
-See **[RESEARCH_AND_DESIGN.md](./RESEARCH_AND_DESIGN.md)** for the design document covering skills pipeline, streaming, proactive messaging, and UI principles.
+# Install orchestrator dependencies with dev extras
+cd apps/orchestrator
+uv sync --extra dev
+cd ../..
+```
 
-## Deployment
+### 2. Configuration
 
-See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for deploying the Next.js app and Python orchestrator on **Render** (including the `render.yaml` blueprint and required env vars).
+Copy the example configuration:
+
+```bash
+cp .env.example .env
+```
+
+Key environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POTAETO_PORT` | HTTP port for the FastAPI core | `8010` |
+| `POTAETO_DB_PATH` | Path to SQLite database file | `data/potaeto.db` |
+| `POTAETO_MODEL` | Active LLM model identifier | `opencode-go/deepseek-v4.1-flash` |
+| `POTAETO_SANDBOX_DIR` | Host directory for bwrap workspace | `data/sandbox` |
+| `POTAETO_ARDUINO_PORT` | Serial device for Arduino bridge | `/dev/potaeto-arduino` |
+| `TELEGRAM_BOT_TOKEN` | Bot API token for Telegram interface | `""` (disabled) |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Comma-separated allowed chat IDs | `""` |
+
+### 3. Running Locally
+
+Start the FastAPI core engine:
+
+```bash
+cd apps/orchestrator
+uv run python -m uvicorn app.main:app --host 127.0.0.1 --port 8010 --reload
+```
+
+In a separate terminal, run the Next.js development server:
+
+```bash
+npm run dev
+```
+
+Visit `http://localhost:3000` to interact with Potaeto.
+
+---
+
+## Verification & Testing
+
+Potaeto enforces comprehensive test coverage across both backend and frontend.
+
+### Run All Tests & Verifications
+
+Execute the consolidated smoke test script:
+
+```bash
+bash scripts/smoke-release-2.sh
+```
+
+### Individual Test Suites
+
+- **Backend Pytest Suite (379+ tests)**:
+  ```bash
+  cd apps/orchestrator
+  uv run --extra dev pytest
+  ```
+
+- **Acceptance Scenarios Suite**:
+  ```bash
+  cd apps/orchestrator
+  uv run --extra dev pytest tests/test_acceptance_release_2.py -v
+  ```
+
+- **Frontend Vitest Suite (47+ tests)**:
+  ```bash
+  npm test
+  ```
+
+- **Static Export Build**:
+  ```bash
+  npm run build
+  node scripts/check-static-export.mjs
+  ```
+
+- **PII & Secret Hygiene Scan**:
+  ```bash
+  bash scripts/check-pii.sh
+  ```
+
+---
 
 ## Project Structure
 
 ```
-src/                       # Next.js frontend
-  app/                     # App Router pages and API routes
-  components/              # Reusable React components
-  lib/                     # Utilities (Supabase, Gemini, chat memory)
-  types/                   # TypeScript type definitions
-
-apps/orchestrator/         # Python FastAPI orchestrator
-  app/
-    main.py               # API endpoints
-    config.py             # Environment config
-    router/               # Model routing
-    providers/            # Gemini, Groq, HuggingFace providers
-    skills/               # Skills pipeline service
-
-supabase/migrations/       # SQL migrations (15 files)
+├── apps/
+│   └── orchestrator/                 # Python FastAPI core engine
+│       ├── app/
+│       │   ├── agent/                # Turn queue, context builder, agent loop
+│       │   ├── api/                  # REST & SSE routers (chat, approvals, voice, hardware)
+│       │   ├── db/                   # SQLite schema migrations and repositories
+│       │   ├── hardware/             # Arduino Protocol v1 serial bridge
+│       │   ├── memory/               # Governed memory service, FTS indexer, tools
+│       │   ├── providers/            # LLM providers (OpenCode Go, OpenRouter, offline)
+│       │   ├── scheduler/            # Cron runner and leased execution engine
+│       │   ├── tools/                # run_command, lens_mcp, arduino, monitor tools
+│       │   ├── voice/                # Piper TTS & Whisper.cpp runners
+│       │   └── workflows/            # JSON workflow engine and step interpreters
+│       └── tests/                    # Pytest test suite (379+ tests)
+├── src/                              # Next.js 16.4.6 static PWA client
+│   ├── app/                          # App router pages (chat, memory, hardware, pair)
+│   ├── components/                   # UI components (ApprovalModal, ArduinoPanel, MemoryGovernance)
+│   └── lib/core/                     # Client API, IndexedDB storage, sync engine
+├── deploy/                           # Systemd service units and caddy configurations
+├── scripts/                          # Smoke tests, backup utilities, and PII scanners
+└── out/                              # Static production build export
 ```
 
-## Icon
+---
 
-Add a cute potato icon at `public/icon-192.png` and `public/icon-512.png` for the PWA manifest.
+## Privacy and Open-Source Safety Rule
 
-## Privacy / OSS-safe rule
+This project is built under strict open-source and privacy-preserving guidelines:
+- Tracked git history must never contain real names, personal email addresses, private IP addresses, personal domains, home usernames, or credentials.
+- Always run `bash scripts/check-pii.sh` prior to committing changes.
+- Refer to [docs/PII_POLICY.md](docs/PII_POLICY.md) for full compliance guidelines.
 
-This repository must stay safe to publish. See **[docs/PII_POLICY.md](./docs/PII_POLICY.md)** and run `scripts/check-pii.sh` before pushing (or enable the pre-commit hook with `git config core.hooksPath .githooks`). The private `agent-memory` store is the only place personal context may live; never copy it into the repo.
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

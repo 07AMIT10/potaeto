@@ -35,9 +35,11 @@ from app.db.repositories.usage import UsageRepo, normalize_usage
 from app.memory.service import MemoryService
 from app.memory.tools import MemoryTools
 from app.providers.base import ChatMessage, ChatRequest, StreamEvent
+from app.tools.arduino import ArduinoTools
 from app.tools.lens_mcp import LensResearchTools
 from app.tools.monitor import MonitorTools
 from app.tools.registry import ApprovalRequiredError, ToolRegistry
+from app.tools.run_command import run_command
 
 logger = logging.getLogger(__name__)
 
@@ -255,13 +257,14 @@ class AgentLoop:
             self.tools = self.registry.as_tool_map()
         else:
             if tools is None:
-                # Memory governance plus the read-only host/network monitors. The
-                # monitor's blocking HTTP call is moved off the event loop by
-                # ``_execute_tool``.
+                # Memory governance, read-only host/network monitors, Lens MCP research,
+                # Arduino hardware controls, and sandboxed run_command (approval-gated).
                 self.tools = {
                     **MemoryTools(db, default_scope=self.memory_scope).as_tool_map(),
                     **MonitorTools(db).as_tool_map(),
                     **LensResearchTools().as_tool_map(),
+                    **ArduinoTools().as_tool_map(),
+                    "run_command": run_command,
                 }
             else:
                 self.tools = dict(tools)
