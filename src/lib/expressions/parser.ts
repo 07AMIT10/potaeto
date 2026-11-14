@@ -1,6 +1,6 @@
 import type { MessageSpan } from './types';
 
-const ACTION_REGEX = /\*([^*]{1,120})\*/g;
+const ACTION_REGEX = /(?<!\*)\*([^\s*](?:[^*\n]{0,118}[^\s*])?)\*(?!\*)/g;
 
 export function parseMessageSpans(text: string): MessageSpan[] {
   const spans: MessageSpan[] = [];
@@ -47,7 +47,7 @@ export function parseMessageSpans(text: string): MessageSpan[] {
 export function extractActionTexts(text: string): string[] {
   const results: string[] = [];
   let match: RegExpExecArray | null;
-  const re = /\*([^*]{1,120})\*/g;
+  const re = /(?<!\*)\*([^\s*](?:[^*\n]{0,118}[^\s*])?)\*(?!\*)/g;
   while ((match = re.exec(text)) !== null) {
     results.push(match[1]);
   }

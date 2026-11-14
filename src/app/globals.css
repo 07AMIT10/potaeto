@@ -32,6 +32,18 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+  .pt-safe {
+    padding-top: max(env(safe-area-inset-top, 0px), 0.75rem);
+  }
+  .pb-safe {
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), 0.75rem);
+  }
+  .pl-safe {
+    padding-left: max(env(safe-area-inset-left, 0px), 0.5rem);
+  }
+  .pr-safe {
+    padding-right: max(env(safe-area-inset-right, 0px), 0.5rem);
+  }
 }
 
 @layer components {

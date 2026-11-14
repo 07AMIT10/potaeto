@@ -38,14 +38,14 @@ function usePersistentStorage(): StorageStatus {
 }
 
 function StorageStatusBadge({ status }: { status: StorageStatus }) {
-  if (status === 'checking' || status === 'unsupported') return null;
+  if (status === 'checking' || status === 'unsupported' || status === 'granted') return null;
   return (
-    <p className="text-xs text-[var(--muted)] text-center" data-testid="storage-status">
-      Offline storage:{' '}
-      {status === 'granted'
-        ? 'persistent'
-        : 'best-effort (the browser may evict the cache)'}
-    </p>
+    <div className="mb-2 text-xs text-amber-600 dark:text-amber-400/90 text-center px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-md" data-testid="storage-status">
+      Offline storage: best-effort (browser may evict cache when storage is low).{' '}
+      <Link href="/pair" className="underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-300">
+        Settings
+      </Link>
+    </div>
   );
 }
 
@@ -95,7 +95,7 @@ function ChatPageContent() {
   }
 
   return (
-    <main className="min-h-screen flex flex-col max-w-3xl mx-auto w-full px-4 py-6">
+    <main className="min-h-screen flex flex-col max-w-3xl mx-auto w-full px-2 sm:px-4 py-2 sm:py-4 pt-safe pb-safe">
       {!online && (
         <div className="mb-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 px-4 py-2 text-sm text-center">
           You&apos;re offline — messages will sync when you reconnect.

@@ -211,7 +211,7 @@ export function ChatBase({
                 )}
 
                 {/* Bubble */}
-                <div className="relative max-w-[75%] sm:max-w-[65%]">
+                <div className="relative max-w-[86%] sm:max-w-[72%]">
                   {/* Proactive label */}
                   {msg.proactive && isAssistant && (
                     <span className="inline-block text-[10px] font-medium text-potato-500 mb-1 uppercase tracking-wide">

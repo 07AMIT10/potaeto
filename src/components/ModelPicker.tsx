@@ -84,15 +84,15 @@ export function ModelPicker() {
   const hasUsage = usage && (totalTokens > 0 || usage.call_count > 0);
 
   return (
-    <div className="mr-auto flex items-center gap-2">
-      <label className="flex items-center gap-1 text-xs text-[var(--muted)]">
+    <div className="mr-auto flex items-center gap-1.5 min-w-0">
+      <label className="flex items-center gap-1 text-xs text-[var(--muted)] min-w-0">
         <span className="sr-only">Model</span>
         <select
           aria-label="Model"
           value={active}
           disabled={saving}
           onChange={(event) => void choose(event.target.value)}
-          className="max-w-[14rem] truncate rounded-md border border-[var(--card-border)] bg-[var(--card)] px-2 py-1 text-xs"
+          className="max-w-[8rem] sm:max-w-[13rem] truncate rounded-md border border-[var(--card-border)] bg-[var(--card)] px-2 py-1 text-xs"
         >
           {!active && <option value="">Choose a model…</option>}
           {models.map((model) => {
@@ -108,7 +108,7 @@ export function ModelPicker() {
       {hasUsage && (
         <span
           data-testid="model-usage-badge"
-          className="inline-flex items-center gap-1 rounded-full border border-[var(--card-border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)]"
+          className="whitespace-nowrap shrink-0 inline-flex items-center gap-1 rounded-full border border-[var(--card-border)] bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted)]"
           title={`In: ${usage.total_tokens_in.toLocaleString()} · Out: ${usage.total_tokens_out.toLocaleString()} · Total: ${totalTokens.toLocaleString()} tokens · Calls: ${usage.call_count}${usage.total_cost > 0 ? ` · Cost: $${usage.total_cost.toFixed(4)}` : ''}`}
         >
           <span className="font-mono">{formatTokens(totalTokens)} tok</span>

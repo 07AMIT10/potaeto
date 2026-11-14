@@ -370,27 +370,31 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
         onReaction={handleReaction}
         onRegenerate={regenerate}
         headerContent={
-          <div className="flex items-center justify-end gap-1 px-4 pt-2">
-            <Link
-              href="/memory"
-              className="btn-ghost p-2 text-[var(--muted)] hover:text-potato-600 transition-colors"
-              title="Memory governance"
-              aria-label="Memory governance"
-            >
-              🧠
-            </Link>
-            <Link
-              href="/hardware"
-              className="btn-ghost p-2 text-[var(--muted)] hover:text-potato-600 transition-colors"
-              title="Hardware & Sensors"
-              aria-label="Hardware & Sensors"
-            >
-              🔌
-            </Link>
-            <ModelPicker />
-            <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
-            <ChatExport messages={messages} entityName={entityName} />
-            <SoundToggle />
+          <div className="flex items-center justify-between gap-1.5 px-3 sm:px-4 pt-2 pb-1 border-b border-[var(--card-border)]/50 min-w-0">
+            <div className="flex items-center gap-1 min-w-0 flex-1">
+              <Link
+                href="/memory"
+                className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
+                title="Memory governance"
+                aria-label="Memory governance"
+              >
+                🧠
+              </Link>
+              <Link
+                href="/hardware"
+                className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
+                title="Hardware & Sensors"
+                aria-label="Hardware & Sensors"
+              >
+                🔌
+              </Link>
+              <ModelPicker />
+            </div>
+            <div className="flex items-center gap-0.5 shrink-0">
+              <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
+              <ChatExport messages={messages} entityName={entityName} />
+              <SoundToggle />
+            </div>
           </div>
         }
         aboveMessages={

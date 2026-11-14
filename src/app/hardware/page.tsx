@@ -6,9 +6,9 @@ import { ArduinoPanel } from '@/components/hardware/ArduinoPanel';
 
 function HardwareDashboardContent() {
   return (
-    <main className="min-h-screen flex flex-col max-w-5xl mx-auto w-full px-4 py-8">
+    <main className="min-h-screen flex flex-col max-w-5xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8 pt-safe pb-safe">
       {/* Navigation Header */}
-      <nav className="flex items-center justify-between pb-6 mb-6 border-b border-[var(--card-border)]">
+      <nav className="flex items-center justify-between pb-4 sm:pb-6 mb-4 sm:mb-6 border-b border-[var(--card-border)]">
         <div className="flex items-center gap-3">
           <Link
             href="/"

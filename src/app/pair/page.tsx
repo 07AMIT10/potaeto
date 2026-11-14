@@ -57,16 +57,16 @@ export default function PairPage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6">
-      <div className="w-full max-w-sm space-y-8 animate-fade-in">
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 sm:px-6 py-8 pt-safe pb-safe">
+      <div className="w-full max-w-sm space-y-6 sm:space-y-8 animate-fade-in my-auto">
         <div className="text-center space-y-2">
-          <Link href="/" className="text-3xl font-bold text-potato-600 inline-block">
+          <Link href="/" className="text-3xl font-bold text-potato-600 inline-block hover:opacity-90 transition-opacity">
             Potaeto
           </Link>
           <h1 className="text-xl font-semibold">Pair this device</h1>
-          <p className="text-sm text-[var(--muted)]">
+          <p className="text-sm text-[var(--muted)] leading-relaxed">
             Create a code on the server with{' '}
-            <code className="text-xs">python -m app.cli pair</code>, then enter it
+            <code className="whitespace-nowrap px-1.5 py-0.5 rounded bg-black/5 dark:bg-white/10 font-mono text-xs">python -m app.cli pair</code>, then enter it
             here. Codes are single-use and expire after five minutes.
           </p>
         </div>
