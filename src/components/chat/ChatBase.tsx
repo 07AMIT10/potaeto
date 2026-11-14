@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback, type ReactNode } from 'react';
 import { AvatarFace } from '@/components/AvatarFace';
 import { MessageContent } from '@/components/MessageContent';
+import { VoiceInputButton } from '@/components/chat/VoiceInputButton';
 import { useExpression } from '@/lib/expressions/useExpression';
 import { useTalkingMouth } from '@/lib/expressions/useTalkingMouth';
 import { useGaze } from '@/lib/expressions/useGaze';
@@ -50,6 +51,8 @@ export interface ChatBaseProps {
   onReaction?: (messageIndex: number, emoji: string) => void;
   /** Show regenerate button on last assistant message. */
   onRegenerate?: () => void;
+  /** Speak a message aloud using voice synthesis. */
+  onSpeak?: (text: string) => void;
   /** Min height for the chat container. */
   minHeight?: string;
   /** Max height for the chat container. */
@@ -87,6 +90,7 @@ export function ChatBase({
   aboveMessages,
   onReaction,
   onRegenerate,
+  onSpeak,
   minHeight,
   maxHeight,
   avatarSize = 32,
@@ -227,6 +231,24 @@ export function ChatBase({
                     <MessageContent text={msg.parts} isAssistant={isAssistant} />
                   </div>
 
+                  {/* Speak button for assistant message */}
+                  {isAssistant && msg.parts && (
+                    <div className="flex items-center gap-1.5 mt-0.5 ml-1">
+                      <button
+                        type="button"
+                        onClick={() => onSpeak?.(msg.parts)}
+                        className="text-[11px] text-[var(--muted)] hover:text-potato-600 transition-colors inline-flex items-center gap-1 py-0.5 px-1.5 rounded-full hover:bg-[var(--card)]"
+                        title="Listen to Potaeto"
+                        aria-label="Listen to Potaeto"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                        </svg>
+                        <span>Listen</span>
+                      </button>
+                    </div>
+                  )}
+
                   {/* Reactions display */}
                   {msg.reactions && msg.reactions.length > 0 && (
                     <div className="flex gap-0.5 mt-1">
@@ -321,6 +343,13 @@ export function ChatBase({
               placeholder={inputPlaceholder ?? `Message ${entityName}...`}
               disabled={loading || inputDisabled}
               className="input-field flex-1"
+            />
+            <VoiceInputButton
+              onTranscript={(transcribed) => {
+                const combined = input ? `${input} ${transcribed}` : transcribed;
+                onInputChange(combined);
+              }}
+              disabled={loading || inputDisabled}
             />
             <button
               type="submit"

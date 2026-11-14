@@ -12,6 +12,7 @@ import { ChatExport } from '@/components/ChatExport';
 import { ModelPicker } from '@/components/ModelPicker';
 import { ApprovalModal } from '@/components/chat/ApprovalModal';
 import { playMessageSend, playMessageReceive, playReaction, isSoundEnabled, setSoundEnabled } from '@/lib/chat/sounds';
+import { speechPlayer } from '@/lib/voice/speech';
 import { sendNotification } from '@/lib/native/notifications';
 import type { AvatarTemplateId } from '@/lib/avatar/template';
 
@@ -239,6 +240,9 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
         }
         setAwaitingReply(null);
         playMessageReceive();
+        if (full && isSoundEnabled()) {
+          void speechPlayer.speak(full);
+        }
       } catch {
         // Offline or stream failure: keep the outbox entry so flush() pushes it
         // on reconnect. Remove the empty assistant placeholder (no reply
@@ -369,6 +373,7 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
         onSend={send}
         onReaction={handleReaction}
         onRegenerate={regenerate}
+        onSpeak={(text) => { void speechPlayer.speak(text); }}
         headerContent={
           <div className="flex items-center justify-between gap-1.5 px-3 sm:px-4 pt-2 pb-1 border-b border-[var(--card-border)]/50 min-w-0">
             <div className="flex items-center gap-1 min-w-0 flex-1">

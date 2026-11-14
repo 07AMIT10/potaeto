@@ -68,7 +68,14 @@ export class SpeechPlayer {
 
   private tryWebSpeech(text: string, options: SpeechOptions): Promise<boolean> {
     return new Promise((resolve) => {
-      if (typeof window === 'undefined' || !('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+      // In Tauri or non-speech environments, bypass Web Speech API immediately
+      if (
+        typeof window === 'undefined' ||
+        !('speechSynthesis' in window) ||
+        typeof SpeechSynthesisUtterance === 'undefined' ||
+        window.location.origin.includes('tauri.localhost') ||
+        window.location.origin.includes('tauri://')
+      ) {
         resolve(false);
         return;
       }
@@ -120,13 +127,22 @@ export class SpeechPlayer {
       return false;
     }
 
-    const baseUrl = options.coreBaseUrl || '';
+    const baseUrl =
+      options.coreBaseUrl ||
+      (typeof window !== 'undefined'
+        ? window.location.origin.includes('tauri.localhost') || window.location.origin.includes('tauri://')
+          ? 'http://127.0.0.1:8010'
+          : localStorage.getItem('potaeto_core_url')?.replace(/\/+$/, '') || ''
+        : '');
     const url = `${baseUrl}/v1/voice/synthesize`;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
-    if (options.authToken) {
-      headers['Authorization'] = `Bearer ${options.authToken}`;
+    const token =
+      options.authToken ||
+      (typeof window !== 'undefined' ? localStorage.getItem('potaeto_device_token') : null);
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     try {
