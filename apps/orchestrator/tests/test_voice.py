@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.voice.stt import WhisperStt
-from app.voice.tts import PiperTts
+from app.voice.tts import PiperTts, sanitize_speech_text
 
 
 def _create_wav(
@@ -35,6 +35,17 @@ def _create_wav(
         else:
             raw = b"\x80" * (n_frames * channels)
         wf.writeframes(raw)
+
+
+def test_sanitize_speech_text() -> None:
+    """Sanitizing speech strips action tags, markdown formatting, and keeps words."""
+    assert sanitize_speech_text("Hello *waves* there") == "Hello there"
+    assert (
+        sanitize_speech_text("Hello there! I am Potaeto. *waves happily* Everything is **100%** running offline.")
+        == "Hello there! I am Potaeto. Everything is 100% running offline."
+    )
+    assert sanitize_speech_text("### Status: `ok`") == "Status: ok"
+    assert sanitize_speech_text("*yawns*") == "*yawns*"  # does not become empty if only action
 
 
 def test_tts_cache_key_generation(tmp_path: Path) -> None:
