@@ -101,7 +101,7 @@ class MemoryIndexer:
                 continue
             try:
                 raw = path.read_text(encoding="utf-8", errors="replace")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning("Failed to read %s: %s", path, exc)
                 continue
             meta, body = parse_frontmatter(raw)

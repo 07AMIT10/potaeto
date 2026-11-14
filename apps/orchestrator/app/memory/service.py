@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import UTC, datetime
+from typing import Any
 
 from app.audit import audit_safely
 from app.db.repositories.base import fetch_all, from_row, fts_any_query
@@ -318,3 +319,22 @@ class MemoryService:
         """Return one memory by id, including superseded/retracted rows."""
         target_id = getattr(memory_id, "id", str(memory_id))
         return self.repo.require(self.repo.get(target_id), "memory", target_id)
+
+    def hybrid_search(
+        self,
+        query: str,
+        top_k: int = 5,
+        rrf_k: int = 60,
+        *,
+        user_id: str | None = None,
+        scope: str = "global",
+    ) -> list[Memory]:
+        """Hybrid vector and FTS memory search using Reciprocal Rank Fusion."""
+        actual_user_id = user_id or "u1"
+        return self.repo.hybrid_search(
+            query=query,
+            top_k=top_k,
+            rrf_k=rrf_k,
+            user_id=actual_user_id,
+            scope=scope,
+        )

@@ -15,13 +15,14 @@ from typing import Any
 from app.db.repositories.base import BaseRepo, dump_json, from_row
 from app.db.repositories.conversations import ConversationRepo
 from app.db.repositories.entities import EntityRepo
+from app.db.repositories.memories import MemoryRepo
 from app.db.repositories.messages import MessageRepo
 
 # Release 1 has exactly one local user and one primary agent thread.
 DEFAULT_USER_ID = "u_local"
 PRIMARY_ENTITY_ID = "e_potaeto"
 
-_SUPPORTED_ENTITY_TYPES = ("message", "entity")
+_SUPPORTED_ENTITY_TYPES = ("message", "entity", "memory")
 
 
 @dataclass(frozen=True)
@@ -221,7 +222,44 @@ class SyncRepo(BaseRepo):
             )
         if op.entity_type == "message":
             return self._push_message(device_id, op)
+        if op.entity_type == "memory":
+            return self._push_memory(device_id, op)
         return self._push_entity(op)
+
+    def _push_memory(self, device_id: str, op: PushOperation) -> PushResult:
+        """Insert or update a memory row, indexing into vec_memories."""
+        memories = MemoryRepo(self.conn)
+        existing = memories.get(op.entity_id, include_deleted=True)
+        user_id = self._device_user_id(device_id)
+        payload = op.payload or {}
+        if existing is None:
+            if op.base_rev not in (0, None):
+                return PushResult(op.idempotency_key, "conflict", 0, error="stale_rev")
+            content = payload.get("content", "")
+            mem = memories.create(
+                user_id=user_id,
+                content=content,
+                memory_id=op.entity_id,
+                kind=payload.get("kind", "fact"),
+                source=payload.get("source", "sync"),
+                source_ref=payload.get("source_ref"),
+                confidence=float(payload.get("confidence", 0.5)),
+                sensitivity=payload.get("sensitivity", "normal"),
+                scope=payload.get("scope", "global"),
+                status=payload.get("status", "active"),
+                valid_from=payload.get("valid_from"),
+                valid_to=payload.get("valid_to"),
+                supersedes=payload.get("supersedes"),
+                user_confirmed=bool(payload.get("user_confirmed", False)),
+            )
+            change = self.create("memory", mem.id, "insert", asdict(mem))
+            return PushResult(op.idempotency_key, "applied", mem.rev, change.seq)
+        if op.base_rev != existing.rev:
+            return PushResult(op.idempotency_key, "conflict", existing.rev, error="stale_rev")
+        updatable = {k: v for k, v in payload.items() if k in memories._UPDATABLE}
+        mem = memories.update(op.entity_id, **updatable)
+        change = self.create("memory", mem.id, "update", asdict(mem))
+        return PushResult(op.idempotency_key, "applied", mem.rev, change.seq)
 
     @staticmethod
     def _replay(op: PushOperation, stored: ClientOperation) -> PushResult:

@@ -10,6 +10,7 @@
  */
 
 import type {
+  ActiveTaskItem,
   AgentEvent,
   ApprovalRequest,
   CatalogModel,
@@ -18,13 +19,17 @@ import type {
   MemoryItem,
   MemoryStatus,
   ModelCatalog,
+  MonitorStatus,
   PrimaryAgent,
   ProviderUsageSummary,
   PushOperation,
   PushResult,
   PushStatus,
+  ScheduledTimerItem,
   SyncResponse,
   TelemetryData,
+  WorkflowExecutionResponse,
+  WorkflowInfo,
 } from './types';
 
 export interface CoreClientOptions {
@@ -273,6 +278,27 @@ export class CoreClient {
     return this.requestJson<{ ok: boolean; error?: string }>('/v1/hardware/led', {
       method: 'POST',
       body: JSON.stringify({ r, g, b, pattern }),
+    });
+  }
+
+  /** Fetch live server vitals, active background tasks, timers, and pending approvals. */
+  async getMonitorStatus(): Promise<MonitorStatus> {
+    return this.requestJson<MonitorStatus>('/v1/monitor/status');
+  }
+
+  /** List available one-tap workflows. */
+  async listWorkflows(): Promise<WorkflowInfo[]> {
+    return this.requestJson<WorkflowInfo[]>('/v1/workflows');
+  }
+
+  /** Trigger an executive workflow pipeline. */
+  async executeWorkflow(
+    workflow: string,
+    payload: Record<string, unknown> = {},
+  ): Promise<WorkflowExecutionResponse> {
+    return this.requestJson<WorkflowExecutionResponse>(`/v1/workflows/${workflow}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
     });
   }
 

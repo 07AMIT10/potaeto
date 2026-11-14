@@ -20,13 +20,16 @@ from app.api.approvals import router as approvals_router
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.errors import install_error_handlers
+from app.api.executive import router as executive_router
 from app.api.hardware import router as hardware_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.memory import router as memory_router
 from app.api.models import router as models_router
+from app.api.monitor import router as monitor_router
 from app.api.sync import router as sync_router
 from app.api.voice import router as voice_router
+from app.api.workflows import router as workflows_router
 from app.config import Settings, get_settings
 from app.db.connection import connect_db, run_migrations
 from app.memory.indexer import MemoryIndexer
@@ -140,6 +143,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(voice_router)
     app.include_router(approvals_router)
     app.include_router(hardware_router)
+    app.include_router(monitor_router)
+    app.include_router(workflows_router)
+    app.include_router(executive_router)
     return app
 
 

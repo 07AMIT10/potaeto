@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 from pathlib import Path
 
 from app.db.migrations import discover_migrations
+
+logger = logging.getLogger(__name__)
 
 #: Process-wide write lock guarding the single shared connection.
 #:
@@ -52,6 +55,55 @@ class LockedConnection(sqlite3.Connection):
             return super().executescript(*args, **kwargs)
 
 
+def load_vec_extension(conn: sqlite3.Connection) -> bool:
+    """Load sqlite-vec extension if available. Returns True if loaded."""
+    try:
+        import sqlite_vec
+
+        conn.enable_load_extension(True)
+        try:
+            sqlite_vec.load(conn)
+            return True
+        finally:
+            conn.enable_load_extension(False)
+    except Exception as exc:
+        logger.debug("sqlite-vec extension not loaded: %s", exc)
+        return False
+
+
+def _backfill_memory_vectors(conn: sqlite3.Connection) -> None:
+    """Index vectors for any memory rows missing from vec_memories."""
+    try:
+        has_vec = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+        ).fetchone()
+        if not has_vec:
+            return
+        rows = conn.execute(
+            """
+            SELECT m.rowid, m.content
+            FROM memories m
+            LEFT JOIN vec_memories v ON v.rowid = m.rowid
+            WHERE m.deleted = 0 AND v.rowid IS NULL AND m.content != ''
+            """
+        ).fetchall()
+        if not rows:
+            return
+        from app.memory.embeddings import generate_embedding, serialize_float32
+
+        with WRITE_LOCK:
+            for row in rows:
+                rowid, content = row[0], row[1]
+                vec = generate_embedding(content)
+                conn.execute(
+                    "INSERT INTO vec_memories(rowid, embedding) VALUES (?, ?)",
+                    (rowid, serialize_float32(vec)),
+                )
+            conn.commit()
+    except Exception as exc:
+        logger.debug("Vector backfill skipped: %s", exc)
+
+
 def connect_db(path: str | Path) -> sqlite3.Connection:
     """Open a connection configured with the canonical pragmas.
 
@@ -70,6 +122,7 @@ def connect_db(path: str | Path) -> sqlite3.Connection:
     conn.execute("PRAGMA synchronous=FULL")
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
+    load_vec_extension(conn)
     return conn
 
 
@@ -79,6 +132,7 @@ def run_migrations(conn: sqlite3.Connection) -> None:
     Each migration and its version row are applied atomically; calling this
     repeatedly is a no-op for already-applied versions.
     """
+    load_vec_extension(conn)
     conn.execute(SCHEMA_VERSION_TABLE)
     conn.commit()
 
@@ -97,3 +151,5 @@ def run_migrations(conn: sqlite3.Connection) -> None:
         except Exception:
             conn.rollback()
             raise
+
+    _backfill_memory_vectors(conn)

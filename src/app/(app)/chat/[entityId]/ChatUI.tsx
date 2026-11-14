@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useCore } from '@/components/providers/CoreProvider';
 import { ulid } from '@/lib/core/ulid';
@@ -15,6 +15,12 @@ import { playMessageSend, playMessageReceive, playReaction, isSoundEnabled, setS
 import { speechPlayer } from '@/lib/voice/speech';
 import { sendNotification } from '@/lib/native/notifications';
 import type { AvatarTemplateId } from '@/lib/avatar/template';
+import { Potato3DCanvas } from '@/components/avatar/Potato3DCanvas';
+import { LiveCaptions } from '@/components/chat/LiveCaptions';
+import { VoiceAmbientOrb } from '@/components/chat/VoiceAmbientOrb';
+import { useExpression } from '@/lib/expressions/useExpression';
+import { useTalkingMouth } from '@/lib/expressions/useTalkingMouth';
+import { TaskWorkflowDrawer } from '@/components/tasks/TaskWorkflowDrawer';
 
 interface ChatUIProps {
   entityId: string;
@@ -63,6 +69,10 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   const [streaming, setStreaming] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [latestChunkLength, setLatestChunkLength] = useState(0);
+  const [viewMode, setViewMode] = useState<'voice' | 'classic'>('voice');
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isExecutiveDrawerOpen, setIsExecutiveDrawerOpen] = useState(false);
+
   // A message that is cached/queued but has no assistant answer yet. The
   // banner lets the user retry the turn after reconnecting instead of leaving
   // a silent gap (a full offline agent turn is out of scope for Release 1).
@@ -74,6 +84,35 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
     expires_at?: number;
   } | null>(null);
   const [approvalLoading, setApprovalLoading] = useState(false);
+
+  // Load view mode preference from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('potaeto_chat_view_mode');
+      if (saved === 'classic' || saved === 'voice') {
+        setViewMode(saved);
+      }
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  const handleToggleMode = useCallback((mode: 'voice' | 'classic') => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('potaeto_chat_view_mode', mode);
+    } catch {
+      // Fallback
+    }
+  }, []);
+
+  // Poll speech player speaking state for reactive avatar expressions
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIsSpeaking(speechPlayer.isSpeaking());
+    }, 150);
+    return () => clearInterval(interval);
+  }, []);
 
   // Check for any pending unexpired approvals on load or reconnect
   useEffect(() => {
@@ -348,69 +387,112 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
   }, []);
 
   // -----------------------------------------------------------------------
-  // Latest assistant text for quick replies
+  // Latest assistant text for quick replies and voice hero
   // -----------------------------------------------------------------------
-  const latestAssistantText =
-    messages.length > 0 && messages[messages.length - 1].role === 'model'
-      ? messages[messages.length - 1].parts
-      : '';
+  const latestAssistantText = useMemo(() => {
+    if (messages.length === 0) return '';
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'model') {
+        return messages[i].parts;
+      }
+    }
+    return '';
+  }, [messages]);
 
-  // -----------------------------------------------------------------------
-  // Render
-  // -----------------------------------------------------------------------
+  // Avatar expressions & talking mouth
+  const voiceExpression = useExpression(latestAssistantText, streaming);
+  const voiceMouthOpen = useTalkingMouth(streaming, latestChunkLength);
+
+  // Common Header Content with Mode Switch
+  const headerContent = (
+    <div className="flex items-center justify-between gap-1.5 px-3 sm:px-4 pt-2.5 pb-2 border-b border-[var(--card-border)]/50 min-w-0 bg-[var(--card-bg)]/80 backdrop-blur-sm">
+      <div className="flex items-center gap-1 min-w-0 flex-1">
+        <Link
+          href="/memory"
+          className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
+          title="Memory governance"
+          aria-label="Memory governance"
+        >
+          🧠
+        </Link>
+        <Link
+          href="/hardware"
+          className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
+          title="Hardware & Sensors"
+          aria-label="Hardware & Sensors"
+        >
+          🔌
+        </Link>
+        <button
+          type="button"
+          onClick={() => setIsExecutiveDrawerOpen(true)}
+          className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
+          title="Executive Center & Workflows"
+          aria-label="Potaeto Executive Center"
+          aria-expanded={isExecutiveDrawerOpen}
+          aria-controls="potaeto-executive-drawer"
+          data-testid="open-executive-drawer-btn"
+        >
+          ⚡
+        </button>
+        <ModelPicker />
+      </div>
+
+      {/* Mode Switch Toggle */}
+      <div className="inline-flex items-center rounded-lg bg-[var(--card-border)]/40 p-0.5 text-xs font-medium shrink-0 mx-1">
+        <button
+          type="button"
+          onClick={() => handleToggleMode('voice')}
+          className={`px-2.5 py-1 rounded-md transition-all ${
+            viewMode === 'voice'
+              ? 'bg-[var(--card-bg)] text-potato-600 dark:text-potato-400 shadow-xs font-semibold'
+              : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
+          aria-label="3D Voice Mode"
+          title="Switch to Ambient 3D Voice Mode"
+        >
+          🥔 3D Voice
+        </button>
+        <button
+          type="button"
+          onClick={() => handleToggleMode('classic')}
+          className={`px-2.5 py-1 rounded-md transition-all ${
+            viewMode === 'classic'
+              ? 'bg-[var(--card-bg)] text-potato-600 dark:text-potato-400 shadow-xs font-semibold'
+              : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+          }`}
+          aria-label="Classic Chat Mode"
+          title="Switch to Classic Chat Bubble Mode"
+        >
+          💬 Classic
+        </button>
+      </div>
+
+      <div className="flex items-center gap-0.5 shrink-0">
+        <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
+        <ChatExport messages={messages} entityName={entityName} />
+        <SoundToggle />
+      </div>
+    </div>
+  );
+
   return (
     <>
-      <ChatBase
-        messages={messages}
-        entityName={entityName}
-        avatarTemplate={avatarTemplate}
-        loading={loading}
-        streaming={streaming}
-        initialLoading={initialLoading}
-        latestChunkLength={latestChunkLength}
-        input={input}
-        onInputChange={setInput}
-        onSend={send}
-        onReaction={handleReaction}
-        onRegenerate={regenerate}
-        onSpeak={(text) => { void speechPlayer.speak(text); }}
-        headerContent={
-          <div className="flex items-center justify-between gap-1.5 px-3 sm:px-4 pt-2 pb-1 border-b border-[var(--card-border)]/50 min-w-0">
-            <div className="flex items-center gap-1 min-w-0 flex-1">
-              <Link
-                href="/memory"
-                className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
-                title="Memory governance"
-                aria-label="Memory governance"
-              >
-                🧠
-              </Link>
-              <Link
-                href="/hardware"
-                className="btn-ghost p-1.5 text-[var(--muted)] hover:text-potato-600 transition-colors shrink-0 text-base"
-                title="Hardware & Sensors"
-                aria-label="Hardware & Sensors"
-              >
-                🔌
-              </Link>
-              <ModelPicker />
-            </div>
-            <div className="flex items-center gap-0.5 shrink-0">
-              <ChatSearch messages={messages} onScrollToMessage={scrollToMessage} />
-              <ChatExport messages={messages} entityName={entityName} />
-              <SoundToggle />
-            </div>
-          </div>
-        }
-        aboveMessages={
+      {viewMode === 'voice' ? (
+        <div className="flex-1 flex flex-col card overflow-hidden min-h-[640px] relative select-none">
+          {/* Header */}
+          {headerContent}
+
+          {/* Above content (Mood timeline) */}
           <MoodTimeline messages={messages} onClickMessage={scrollToMessage} />
-        }
-        aboveInput={
-          <>
+
+          {/* Voice-First Hero Stage */}
+          <div className="flex-1 flex flex-col items-center justify-between p-4 sm:p-6 overflow-y-auto relative">
+            {/* Offline Awaiting Reply Banner */}
             {awaitingReply && (
               <div
                 role="status"
-                className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+                className="w-full max-w-xl mx-auto mb-3 flex items-center justify-between gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
               >
                 <span>
                   {online
@@ -427,16 +509,158 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
                 </button>
               </div>
             )}
-            {!loading && latestAssistantText ? (
-              <QuickReplies
-                latestAssistantText={latestAssistantText}
-                onSelect={handleQuickReply}
-                disabled={loading}
+
+            {/* 3D Potato Hero Avatar */}
+            <div className="w-full flex-1 flex flex-col items-center justify-center relative min-h-[300px]">
+              <Potato3DCanvas
+                expression={voiceExpression.state}
+                mouthOpenOverride={voiceMouthOpen}
+                isTalking={streaming || isSpeaking}
+                height={320}
+                className="w-full max-w-md drop-shadow-md"
               />
+
+              {/* Floating Live Captions */}
+              <div className="w-full max-w-xl mt-1 mb-2 px-2">
+                <LiveCaptions
+                  text={latestAssistantText || (streaming ? '...' : '')}
+                  isStreaming={streaming}
+                  isSpeaking={isSpeaking}
+                  onOpenChat={() => handleToggleMode('classic')}
+                />
+              </div>
+            </div>
+
+            {/* Glowing Ambient Microphone Orb */}
+            <div className="my-2 flex-shrink-0 flex flex-col items-center justify-center">
+              <VoiceAmbientOrb
+                onTranscript={(text) => {
+                  void streamTurn(text, { addUser: true });
+                }}
+                disabled={loading}
+                isSpeaking={isSpeaking}
+              />
+            </div>
+
+            {/* Conversation transcript bubbles in voice mode */}
+            {messages.length > 0 && (
+              <div
+                data-testid="voice-messages-log"
+                className="w-full max-w-xl flex-1 overflow-y-auto space-y-2.5 my-2 px-2 max-h-48 scrollbar-thin"
+              >
+                {messages.map((m, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                  >
+                    <div
+                      className={`rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                        m.role === 'user'
+                          ? 'bg-potato-500 text-white shadow-xs'
+                          : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-[var(--foreground)] shadow-xs'
+                      }`}
+                    >
+                      {m.parts}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Quick replies in voice mode */}
+            {!loading && latestAssistantText ? (
+              <div className="w-full max-w-xl mx-auto mb-2">
+                <QuickReplies
+                  latestAssistantText={latestAssistantText}
+                  onSelect={handleQuickReply}
+                  disabled={loading}
+                />
+              </div>
             ) : null}
-          </>
-        }
-      />
+
+            {/* Bottom Keyboard Text Input Bar */}
+            <div className="w-full max-w-xl mx-auto pt-1">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  send();
+                }}
+                className="flex items-center gap-2 p-1.5 rounded-full bg-[var(--card-bg)] border border-[var(--card-border)] shadow-xs focus-within:ring-2 focus-within:ring-potato-400/50"
+              >
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={`Message ${entityName}...`}
+                  disabled={loading}
+                  className="flex-1 px-4 py-2 bg-transparent text-sm outline-none text-[var(--foreground)] placeholder:text-[var(--muted)]"
+                />
+                <button
+                  type="submit"
+                  disabled={loading || !input.trim()}
+                  name="Send"
+                  aria-label="Send"
+                  className="btn-primary rounded-full px-4 py-2 text-xs font-medium disabled:opacity-40"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <ChatBase
+          messages={messages}
+          entityName={entityName}
+          avatarTemplate={avatarTemplate}
+          loading={loading}
+          streaming={streaming}
+          initialLoading={initialLoading}
+          latestChunkLength={latestChunkLength}
+          input={input}
+          onInputChange={setInput}
+          onSend={send}
+          onReaction={handleReaction}
+          onRegenerate={regenerate}
+          onSpeak={(text) => { void speechPlayer.speak(text); }}
+          headerContent={headerContent}
+          aboveMessages={
+            <MoodTimeline messages={messages} onClickMessage={scrollToMessage} />
+          }
+          aboveInput={
+            <>
+              {awaitingReply && (
+                <div
+                  role="status"
+                  className="mx-4 mb-2 flex items-center justify-between gap-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+                >
+                  <span>
+                    {online
+                      ? 'Sent — awaiting reply.'
+                      : 'Saved offline — will send when you reconnect.'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={retryAwaitingReply}
+                    disabled={loading}
+                    className="btn-ghost shrink-0 px-2 py-1 text-xs"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!loading && latestAssistantText ? (
+                <QuickReplies
+                  latestAssistantText={latestAssistantText}
+                  onSelect={handleQuickReply}
+                  disabled={loading}
+                />
+              ) : null}
+            </>
+          }
+        />
+      )}
+
       {activeApproval && (
         <ApprovalModal
           approval={activeApproval}
@@ -444,6 +668,11 @@ export function ChatUI({ entityId, entityName, avatarTemplate = 'potato' }: Chat
           onResolve={handleResolveApproval}
         />
       )}
+
+      <TaskWorkflowDrawer
+        isOpen={isExecutiveDrawerOpen}
+        onClose={() => setIsExecutiveDrawerOpen(false)}
+      />
     </>
   );
 }

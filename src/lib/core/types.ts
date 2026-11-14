@@ -178,3 +178,49 @@ export interface TelemetryData {
   ok?: boolean;
 }
 
+export interface ActiveTaskItem {
+  id: string;
+  name: string;
+  status: 'running' | 'completed' | 'queued' | 'failed' | string;
+  progress?: number;
+  details?: string | null;
+  started_at?: string | null;
+}
+
+export interface ScheduledTimerItem {
+  id: string;
+  name: string;
+  schedule: string;
+  next_run?: string | null;
+  enabled?: boolean;
+}
+
+export interface MonitorStatus {
+  status: string;
+  cpu_pct: number;
+  memory_rss_mb: number;
+  temperature_c: number | null;
+  load_1m?: number | null;
+  active_tasks: ActiveTaskItem[];
+  scheduled_timers: ScheduledTimerItem[];
+  pending_approvals: ApprovalRequest[];
+  uptime_seconds?: number;
+  timestamp?: string;
+}
+
+export interface WorkflowInfo {
+  id: string;
+  name: string;
+  icon: string;
+  description: string;
+  endpoint: string;
+}
+
+export interface WorkflowExecutionResponse {
+  workflow: string;
+  status: 'completed' | 'failed' | 'running' | string;
+  summary: string;
+  timestamp: string;
+  data: Record<string, unknown>;
+}
+

@@ -45,6 +45,8 @@ __pycache__/
 
 # local sqlite data
 /apps/orchestrator/data/
+/apps/orchestrator/models/
+/models/
 
 # tauri / rust
 src-tauri/target/

@@ -33,6 +33,7 @@ class MemoryResponse(BaseModel):
     user_confirmed: bool
     created_at: str
     updated_at: str
+    rrf_score: float | None = None
 
     @classmethod
     def from_memory(cls, m: Memory) -> MemoryResponse:
@@ -54,6 +55,7 @@ class MemoryResponse(BaseModel):
             user_confirmed=bool(m.user_confirmed),
             created_at=m.created_at,
             updated_at=m.updated_at,
+            rrf_score=getattr(m, "rrf_score", None),
         )
 
 
@@ -78,6 +80,25 @@ def list_memories(
         user_id=ctx.user_id,
         status=status if status else None,
         limit=limit,
+    )
+    return MemoryListResponse(memories=[MemoryResponse.from_memory(m) for m in memories])
+
+
+@router.get("/search", response_model=MemoryListResponse)
+def search_memories(
+    ctx: Annotated[AuthContext, Depends(require_device)],
+    db: Annotated[sqlite3.Connection, Depends(get_db)],
+    q: str = Query(min_length=1),
+    limit: int = Query(default=10, ge=1, le=50),
+    rrf_k: int = Query(default=60, ge=1, le=100),
+) -> MemoryListResponse:
+    """Hybrid search memories for the authenticated user using vector KNN + FTS RRF."""
+    repo = MemoryRepo(db)
+    memories = repo.hybrid_search(
+        query=q,
+        top_k=limit,
+        rrf_k=rrf_k,
+        user_id=ctx.user_id,
     )
     return MemoryListResponse(memories=[MemoryResponse.from_memory(m) for m in memories])
 
