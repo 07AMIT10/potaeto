@@ -8,6 +8,10 @@
 	# API: preserve the path and all request headers. reverse_proxy forwards
 	# CF-Connecting-IP unchanged and appends the immediate peer to
 	# X-Forwarded-For itself; do not overwrite either header here.
+	handle /v1/voice/* {
+		reverse_proxy 127.0.0.1:8012
+	}
+
 	handle /v1/* {
 		reverse_proxy 127.0.0.1:8010
 	}

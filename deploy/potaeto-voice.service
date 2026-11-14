@@ -5,6 +5,8 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=%h/potaeto/apps/orchestrator
+EnvironmentFile=%h/potaeto/.env
+Environment=PATH=%h/potaeto/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/potaeto/apps/orchestrator/.venv/bin/uvicorn app.voice.server:app --port 8012
 MemoryMax=1G
 CPUQuota=300%

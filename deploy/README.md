@@ -1,28 +1,25 @@
 # Deploying Potaeto Release 1
 
-Release 1 runs on a self-hosted Linux host (`agent-host`) as two processes:
+Release 2 & 3 run on a self-hosted Linux host (`agent-host`) as three processes:
 
 ```
 phone / desktop / PWA
         │  HTTPS (optional remote)
         ▼
-Cloudflare Access ── Cloudflare Tunnel ── Caddy :8080 ── potaeto-core 127.0.0.1:8010
-                                              │                    │
-                                              └── /opt/potaeto/out  └── SQLite + agent-memory
+Cloudflare Access ── Cloudflare Tunnel ── Caddy :8080 ┬── potaeto-core 127.0.0.1:8010 ── SQLite + agent-memory
+                                              │       └── potaeto-voice 127.0.0.1:8012 ── Piper + Whisper models
+                                              └── /opt/potaeto/out
 ```
 
 - **`potaeto-core`** is a single uvicorn process bound to **`127.0.0.1:8010`**. It owns SQLite, providers, the agent loop, scheduler, Telegram, and memory indexing.
-- **Caddy** listens on **`:8080`**, serves the static Next.js export from `/opt/potaeto/out`, and proxies `/v1/*` to the core.
+- **`potaeto-voice`** is an isolated voice subsystem bound to **`127.0.0.1:8012`** (`MemoryMax=1G`, `Nice=10`). It owns local offline Piper TTS and Whisper STT inference.
+- **Caddy** listens on **`:8080`**, serves the static Next.js export from `/opt/potaeto/out`, proxies `/v1/voice/*` to `potaeto-voice:8012`, and proxies `/v1/*` to `potaeto-core:8010`.
 - **Cloudflare Tunnel + Access** are the optional remote path. The tunnel is routing, **not authentication**; Access is the remote auth layer, and device pairing remains enforced behind it.
 
 ### Ports
 
 On the target host (`agent-host`), **port `8000` is already taken by another
-service**, so Potaeto's core uses **`8010`** in production. The dev workstation
-(`dev-host`) keeps the historical `8000` default for `npm run dev`
-(`NEXT_PUBLIC_CORE_URL=http://localhost:8000`, `ORCHESTRATOR_URL=http://localhost:8000`).
-Any production reference to the core — unit, Caddy upstream, health checks —
-must use `8010`.
+service**, so Potaeto's core uses **`8010`**, the voice worker uses **`8012`**, and Caddy listens on **`8080`**.
 
 ## Layout
 
@@ -32,6 +29,8 @@ must use `8010`.
 | `/opt/potaeto/apps/orchestrator/.venv` | Core virtualenv (unit's `ExecStart`) |
 | `/opt/potaeto/out` | Built static PWA (`next build`, `output: 'export'`) |
 | `/opt/potaeto/data` | SQLite database (writable by the service) |
+| `/opt/potaeto/data/models` | Offline Piper ONNX and Whisper STT models |
+| `/opt/potaeto/bin` | Self-contained user binaries (caddy, piper, whisper-cli, ffmpeg) |
 | `/opt/potaeto/.env` | Environment file, mode `0600`, owned by `potaeto` |
 | `/opt/potaeto/deploy` | Unit, Caddyfile, and this document |
 | `/home/operator/agent-memory` | Canonical markdown memory tree, versioned with git |

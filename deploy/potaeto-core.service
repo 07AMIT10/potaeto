@@ -14,6 +14,7 @@ WorkingDirectory=/opt/potaeto/apps/orchestrator
 EnvironmentFile=/opt/potaeto/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PATH=/opt/potaeto/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=/opt/potaeto/apps/orchestrator/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010
 Restart=on-failure
 RestartSec=3
